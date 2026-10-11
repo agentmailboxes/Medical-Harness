@@ -29,6 +29,7 @@ from app.prompts import (
 )
 from app.tools.anatomy import select_anatomy
 from app.tools.clinical import TOOL_REGISTRY
+from app.tools.references import REFERENCE_TOOLS
 
 logger = logging.getLogger(__name__)
 cache_scope = ContextVar("cache_scope", default="internal")
@@ -76,9 +77,12 @@ class AgentPipeline:
         evidence: EvidenceRetriever,
         step_cache: TTLCache | None = None,
         evidence_cache: TTLCache | None = None,
+        references=None,
     ):
         self.llm = llm
         self.evidence = evidence
+        self.references = references
+        self.tools = {**TOOL_REGISTRY, **REFERENCE_TOOLS}
         settings = get_settings()
         self.max_evidence_articles = settings.max_evidence_articles
         self.max_tldr_chars = settings.max_tldr_chars
@@ -93,17 +97,15 @@ class AgentPipeline:
             ttl_seconds=settings.evidence_cache_ttl_seconds,
         )
         self._outcomes: Counter[str] = Counter()
-        self.policy_version = text_key(TRIAGE_SYSTEM, TOOL_SELECTION_SYSTEM, VARIABLE_EXTRACTION_SYSTEM, ANSWER_SYSTEM, SAFETY_SYSTEM)
+        self.policy_version = text_key(TRIAGE_SYSTEM, TOOL_SELECTION_SYSTEM, VARIABLE_EXTRACTION_SYSTEM, ANSWER_SYSTEM, SAFETY_SYSTEM,
+                                       *(f"{key}:{info['description']}" for key, info in self.tools.items()))
 
 
         self.tool_selection_system = TOOL_SELECTION_SYSTEM.format(
             tool_descriptions="\n".join(
-                f"- {key}: {info['description']}" for key, info in TOOL_REGISTRY.items()
+                f"- {key}: {info['description']}" for key, info in self.tools.items()
             )
         )
-
-
-
 
 
     async def run(self, conversation: list[str], conversation_id: str) -> dict:
@@ -133,7 +135,6 @@ class AgentPipeline:
                 answer="If possible, ask someone nearby to stay with you and follow the emergency dispatcher's instructions.",
             ))
             return
-
 
 
         conversation_kind = routine_kind(conversation[-1]) if len(conversation) == 1 else None
@@ -172,11 +173,18 @@ class AgentPipeline:
                 return
 
 
-        yield ("step", {"step": "tools", "message": "Checking clinical calculators…"})
+        yield ("step", {"step": "tools", "message": "Checking relevant tools and sources…"})
         tool_results, evidence_result = await asyncio.gather(
             self._run_tools(conv_text), self._retrieve_evidence(conversation, conversation_id)
         )
         evidence_result = dict(evidence_result)
+        papers = [item for result in tool_results if result.get("tool") == REFERENCE_TOOLS["pubmed_search"]["name"]
+                  for item in result.get("items", []) if item.get("tldr")]
+        if papers:
+            sources = list(evidence_result.get("articles", []))[:max(0, self.max_evidence_articles - len(papers))]
+            seen = {item.get("url") for item in sources}
+            evidence_result["articles"] = sources + [item for item in papers if item["url"] not in seen]
+            evidence_result["response"] = ""
         evidence_result["articles"] = evidence_result.get("articles", [])[:self.max_evidence_articles]
         if not evidence_result["articles"]:
             self._outcomes["evidence_unavailable"] += 1
@@ -192,10 +200,12 @@ class AgentPipeline:
         answer_user = self._build_answer_user(question, tool_results, evidence_result)
 
         answer_parts: list[str] = []
+        answer_chars = 0
         try:
             async for chunk in self.llm.generate_stream(answer_user, system=ANSWER_SYSTEM):
                 answer_parts.append(chunk)
-                if sum(map(len, answer_parts)) > self.max_answer_chars:
+                answer_chars += len(chunk)
+                if answer_chars > self.max_answer_chars:
                     raise ReviewUnavailable("Answer exceeded its budget")
 
         except Exception as exc:
@@ -230,9 +240,6 @@ class AgentPipeline:
         ))
 
 
-
-
-
     def outcome_stats(self) -> dict[str, int]:
 
         return {
@@ -261,9 +268,6 @@ class AgentPipeline:
     _NONE_SENTINEL = object()
 
     async def _cached_step(self, step: str, conv_text: str, compute):
-
-
-
 
 
         key = text_key(self.policy_version, cache_scope.get(), getattr(self.llm, "model", "test"), step, conv_text)
@@ -327,28 +331,34 @@ class AgentPipeline:
             logger.warning("pipeline.tool_selection failed")
             return []
 
-        selected = list(dict.fromkeys(k for k in selection.get("selected_tools", []) if isinstance(k, str) and k in TOOL_REGISTRY))[:2]
+        selected = list(dict.fromkeys(k for k in selection.get("selected_tools", []) if isinstance(k, str) and k in self.tools))[:2]
         if not selected:
             return []
 
 
         extractions = await asyncio.gather(
             *(
-                self._extract_variables(conv_text, key, TOOL_REGISTRY[key]["variables"])
+                self._extract_variables(conv_text, key, self.tools[key]["variables"])
                 for key in selected
             )
         )
 
-        results = []
-        for tool_key, variables in zip(selected, extractions):
-            if variables is None or any(k not in variables for k in TOOL_REGISTRY[tool_key]["variables"]):
-                continue
+        async def execute(tool_key, variables):
+            if variables is None or any(k not in variables for k in self.tools[tool_key]["variables"]):
+                return None
             try:
-                result = TOOL_REGISTRY[tool_key]["function"](variables)
-                results.append(result)
+                if tool_key in REFERENCE_TOOLS:
+                    if self.references is None:
+                        return None
+                    key = text_key(self.policy_version, cache_scope.get(), tool_key, conv_text)
+                    return await self.step_cache.get_or_compute(key,
+                        lambda: self.references.run(tool_key, variables), cache_if=lambda value: value.get("status") == "available")
+                return TOOL_REGISTRY[tool_key]["function"](variables)
             except Exception:
                 logger.warning("pipeline.tool_execution failed tool=%s", tool_key)
-        return results
+                return None
+        results = await asyncio.gather(*(execute(key, variables) for key, variables in zip(selected, extractions)))
+        return [result for result in results if result is not None]
 
     async def _extract_variables(
         self, conv_text: str, tool_name: str, variables: list[str]
@@ -379,7 +389,7 @@ class AgentPipeline:
                 for k, v in r.items():
                     if k != "tool":
                         tool_lines.append(f"  {k}: {v}")
-            tool_results_section = "Clinical tool results:\n" + "\n".join(tool_lines)
+            tool_results_section = "Tool results (reference directories are links, not verified clinical claims):\n" + "\n".join(tool_lines)
         else:
             tool_results_section = ""
 
@@ -419,7 +429,7 @@ class AgentPipeline:
         citations_text = "\n".join(citation_lines) or "No citations available."
         if tool_results:
             import json
-            citations_text += "\nValidated calculator outputs:\n" + json.dumps(tool_results, ensure_ascii=False)
+            citations_text += "\nTool outputs (label directory entries do not contain label contents):\n" + json.dumps(tool_results, ensure_ascii=False)
         candidate = answer
         for attempt in range(2):
             user = SAFETY_USER.format(question=question, answer=candidate, citations=citations_text)

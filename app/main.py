@@ -21,6 +21,7 @@ from app.logging_conf import setup_logging
 from app.middleware import RequestSizeMiddleware
 from app.pipeline import AgentPipeline
 from app.rate_limit import RateLimitMiddleware
+from app.tools.references import ReferenceTools
 
 logger = logging.getLogger(__name__)
 
@@ -44,16 +45,17 @@ def create_app() -> FastAPI:
             prompt_cache_key=settings.cerebras_prompt_cache_key,
         )
         evidence = EvidenceRetriever(api_key=settings.medisearch_api_key)
+        references = ReferenceTools()
         app.state.request_slots = asyncio.Semaphore(settings.max_concurrent_requests)
         app.state.llm = llm
-        pipeline = AgentPipeline(llm=llm, evidence=evidence)
+        pipeline = AgentPipeline(llm=llm, evidence=evidence, references=references)
         app.state.pipeline = pipeline
         logger.info("startup complete model=%s version=%s", settings.cerebras_model, __version__)
         try:
             yield
         finally:
             await pipeline.aclose()
-            await asyncio.gather(llm.aclose(), evidence.aclose())
+            await asyncio.gather(llm.aclose(), evidence.aclose(), references.aclose())
 
     app = FastAPI(title="medical-harness", version=__version__, lifespan=lifespan)
 

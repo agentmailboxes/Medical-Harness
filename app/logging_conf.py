@@ -7,6 +7,8 @@ import sys
 def setup_logging(level: str = "INFO") -> None:
     root = logging.getLogger()
     root.setLevel(level.upper())
+    for noisy in ("httpx", "httpcore", "urllib3"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
     if root.handlers:
         return
@@ -18,6 +20,3 @@ def setup_logging(level: str = "INFO") -> None:
         )
     )
     root.addHandler(handler)
-
-    for noisy in ("httpx", "httpcore", "urllib3"):
-        logging.getLogger(noisy).setLevel(logging.WARNING)

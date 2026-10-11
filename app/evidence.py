@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 import httpx
 
 from app.transport import CircuitBreaker, CircuitOpen
+from app.streaming import bounded_lines
 
 logger = logging.getLogger(__name__)
 
@@ -64,14 +65,10 @@ class EvidenceRetriever:
         try:
             for attempt in range(2):
                 result = {"response": "", "articles": [], "followups": []}
-                received = 0
                 try:
                     async with self.client.stream("POST", "https://api.backend.medisearch.io/sse/medichat", json=payload) as response:
                         response.raise_for_status()
-                        async for line in response.aiter_lines():
-                            received += len(line)
-                            if received > 262144:
-                                raise ValueError("Evidence response too large")
+                        async for line in bounded_lines(response):
                             if not line.startswith("data:"):
                                 continue
                             data = line[5:].strip()

@@ -51,7 +51,7 @@ curl -N -X POST http://localhost:8080/api/chat/stream \
 | `result` | Complete authoritative response; the UI renders this |
 | `error` | Safe error detail when streaming work fails |
 
-The server may send SSE comment keep-alives while work is pending. Consumers should ignore comments and use `result` as the final answer. The app currently emits the reviewed answer as one `answer_chunk`, after safety review.
+The server may send SSE comment keep-alives while work is pending. Consumers should ignore comments and use `result` as the final answer. It has the same validated shape as the buffered response, including `conversation_id`. The app emits the reviewed answer as one `answer_chunk`, after safety review; the browser waits for `result`.
 
 ## Metrics
 
@@ -74,3 +74,9 @@ Supported scene IDs are `head`, `neck`, `shoulder`, `chest`, `abdomen`, `pelvis`
 Calculator results include `tool`, `source`, `scope`, and a numeric score or value with units where applicable. Invalid supplied inputs yield an `error`; missing inputs never become assumed normal values. The approximate Framingham calculator has been removed. The new tools are adult CKD-EPI 2021 eGFR, estimated average glucose from HbA1c, and explicit measurement conversion.
 
 The default aggregate conversation limit is 32,000 characters and request body limit is 262,144 bytes. A request above either limit returns 413. The `result` event is authoritative. Incomplete provider streams, failed re-review, or missing/out-of-range citation indices produce an error instead of an answer. An unsafe draft can be revised once and must pass a separate second review. Protected metrics include the LLM `circuit_open` flag.
+
+## Reference tools
+
+`tool_results` may contain a reference result with `tool`, `source`, `scope`, `status` (`available`, `empty`, `unavailable`), and `items`. Each item has `title` and a validated source `url`. DailyMed items optionally include `published`; they contain label directory metadata, not label contents or interaction checks. Europe PMC items include an abstract excerpt in `tldr`, `year`, `journal`, and `evidence_kind: "abstract"`.
+
+PubMed abstracts may join the numbered article list or supply evidence when the primary provider is unavailable. The combined list remains bounded by `MAX_EVIDENCE_ARTICLES`, and all claims still pass answer review. Directory-only label results cannot replace medical evidence. Failed lookups return an explicit limitation; they never mean a medicine is safe or that no research exists.

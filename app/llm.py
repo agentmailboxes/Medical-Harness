@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator
 import httpx
 
 from app.transport import CircuitBreaker
+from app.streaming import bounded_json, bounded_lines
 
 logger = logging.getLogger(__name__)
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
@@ -92,11 +93,11 @@ class CerebrasClient:
             for attempt in range(self.max_retries):
                 try:
                     self.total_requests += 1
-                    response = await self._client.post("/chat/completions", json=self._payload(
+                    async with self._client.stream("POST", "/chat/completions", json=self._payload(
                         user, system, max_tokens=max_tokens, json_mode=json_mode,
-                    ))
-                    response.raise_for_status()
-                    data = response.json()
+                    )) as response:
+                        response.raise_for_status()
+                        data = await bounded_json(response)
                     choice = data["choices"][0]
                     if choice.get("finish_reason") != "stop":
                         raise LLMError("Incomplete completion")
@@ -129,7 +130,7 @@ class CerebrasClient:
                     self.total_requests += 1
                     async with self._client.stream("POST", "/chat/completions", json=self._payload(user, system, stream=True)) as response:
                         response.raise_for_status()
-                        async for line in response.aiter_lines():
+                        async for line in bounded_lines(response, max_bytes=2097152):
                             if not line.startswith("data:"):
                                 continue
                             payload = line[5:].strip()

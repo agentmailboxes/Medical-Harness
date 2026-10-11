@@ -304,7 +304,6 @@ class TestPromptCacheLayout:
         second_users = [user for user, _ in p.llm.calls]
 
 
-
         assert sorted(first_systems) == sorted(second_systems)
         assert all(s for s in first_systems)
         assert sorted(first_users) != sorted(second_users)

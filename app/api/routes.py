@@ -106,6 +106,8 @@ async def chat_stream(req: ChatRequest, request: Request) -> StreamingResponse:
                 except StopAsyncIteration:
                     break
                 pending = None
+                if event_type == "result":
+                    data = ChatResponse(conversation_id=conversation_id, **data).model_dump()
                 yield _sse(event_type, data)
         except Exception:
             logger.warning("chat_stream.failed")

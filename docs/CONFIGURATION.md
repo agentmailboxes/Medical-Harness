@@ -36,7 +36,7 @@ Settings are validated at startup. Invalid budgets, retry counts, or concurrency
 | `RATE_LIMIT_REQUESTS` | `20` |
 | `RATE_LIMIT_WINDOW_SECONDS` | `60` |
 
-The total request deadline covers all steps. Each provider has a shorter transport timeout, bounded retries, connection pooling, and a circuit breaker that opens after three failed calls for 30 seconds. Only one recovery probe is allowed after cooldown. Authentication failures are not retried by the LLM provider.
+The total request deadline covers all steps. Providers have shorter timeouts, connection pooling, and circuit breakers that open after three failures for 30 seconds. Only one recovery probe is allowed after cooldown. LLM and primary evidence retry transient failures within fixed attempt limits; reference tools make one bounded attempt. LLM authentication failures are not retried. DailyMed and Europe PMC need no key; each lookup is limited to eight seconds, three records, and 256 KiB. Buffered JSON and evidence SSE are capped at 256 KiB; LLM SSE has a 2 MiB total and 64 KiB line cap.
 
 A zero cache capacity or TTL disables storage. Cached classifications and evidence contain sensitive derived text in process memory, are scoped to a random HTTP-only browser session, and expire. They are never written to disk. All-waiter cancellation also cancels the shared provider task; one cancelled waiter does not interrupt another. Completed answers are not cached. Cache and quota limits are per process, not global across Vercel instances.
 
