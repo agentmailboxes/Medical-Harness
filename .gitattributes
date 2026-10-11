@@ -1,0 +1,4 @@
+static/dist/* linguist-generated=true -whitespace
+static/assets/atlas/manifest.json linguist-generated=true
+*.glb binary
+*.png binary

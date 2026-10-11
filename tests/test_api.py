@@ -186,3 +186,23 @@ def test_aggregate_conversation_budget(client):
 def test_request_body_budget(client):
     response = client.post("/api/chat", content=b"x" * 300000, headers={"Content-Type": "application/json"})
     assert response.status_code == 413
+
+
+def test_home_exists_before_javascript(client):
+    response = client.get("/")
+    assert 'class="is-home"' in response.text
+    assert 'id="hero"' in response.text
+    assert '{{APP_JS}}' not in response.text
+    assert response.text.index('theme-init-') < response.text.index('rel="stylesheet"')
+    assert response.headers['cache-control'] == 'no-cache'
+    assert 'script-src' in response.headers['content-security-policy']
+
+
+def test_hashed_asset_cache_policy(client):
+    from pathlib import Path
+    manifest = json.loads(Path('static/build.json').read_text())
+    response = client.get(manifest['app.js'])
+    assert response.status_code == 200
+    assert 'immutable' in response.headers['cache-control']
+    assert 'set-cookie' not in response.headers
+    assert client.get('/static/assets/atlas/manifest.json').headers['cache-control'] == 'no-cache'

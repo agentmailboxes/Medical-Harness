@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import asyncio
 import secrets
 from contextlib import asynccontextmanager
@@ -31,6 +32,10 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 def create_app() -> FastAPI:
     settings = get_settings()
     setup_logging(settings.log_level)
+    assets = json.loads((STATIC_DIR / "build.json").read_text(encoding="utf-8"))
+    index_html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    for token, entry in (("APP_JS", "app.js"), ("THEME_JS", "theme-init.js"), ("APP_CSS", "app.css")):
+        index_html = index_html.replace("{{" + token + "}}", assets[entry])
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -82,10 +87,17 @@ def create_app() -> FastAPI:
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+        if request.url.path in {"/docs", "/redoc", "/docs/oauth2-redirect"}:
+            response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' data: https://fastapi.tiangolo.com; worker-src blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
-        if not valid_session:
+        elif request.url.path.startswith("/static/dist/") or (request.url.path.startswith("/static/assets/atlas/") and request.url.path.endswith(".glb")):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-cache"
+        if not valid_session and not request.url.path.startswith("/static/"):
             response.set_cookie("medical_harness_session", request.state.cache_scope, httponly=True,
                                 secure=request.url.scheme == "https", samesite="strict")
         return response
@@ -103,7 +115,7 @@ def create_app() -> FastAPI:
 
     @app.get("/", response_class=HTMLResponse)
     async def index() -> HTMLResponse:
-        return HTMLResponse((STATIC_DIR / "index.html").read_text(encoding="utf-8"))
+        return HTMLResponse(index_html)
 
     return app
 

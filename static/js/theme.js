@@ -1,37 +1,39 @@
-/**
- * theme.js — light/dark theme handling.
- * Persisted in localStorage; falls back to prefers-color-scheme when unset.
- */
-
-const STORAGE_KEY = 'medical-harness-theme';
-
-export function getStoredTheme() {
-  try { return localStorage.getItem(STORAGE_KEY); } catch { return null; }
+const STORAGE_KEY = "medical-harness-theme";
+function getStoredTheme() {
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
 }
-
 function systemPrefersDark() {
-  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
-
-export function currentTheme() {
-  return getStoredTheme() || (systemPrefersDark() ? 'dark' : 'light');
+function currentTheme() {
+  return (["light", "dark"].includes(getStoredTheme()) ? getStoredTheme() : null) || (systemPrefersDark() ? "dark" : "light");
 }
-
-export function applyTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  document.documentElement.style.colorScheme = theme;
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', theme === 'dark' ? '#0b0f13' : '#ffffff');
+  if (meta) meta.setAttribute("content", theme === "dark" ? "#111214" : "#ffffff");
 }
-
-/** Initialize theme on load (called from a module script, so DOM already exists). */
-export function initTheme() {
+function initTheme() {
   applyTheme(currentTheme());
 }
-
-/** Toggle between light/dark, persist choice, return the new theme. */
-export function toggleTheme() {
-  const next = currentTheme() === 'dark' ? 'light' : 'dark';
-  try { localStorage.setItem(STORAGE_KEY, next); } catch { /* storage unavailable */ }
+function toggleTheme() {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  try {
+    localStorage.setItem(STORAGE_KEY, next);
+  } catch {
+  }
   applyTheme(next);
   return next;
 }
+export {
+  applyTheme,
+  currentTheme,
+  getStoredTheme,
+  initTheme,
+  toggleTheme
+};

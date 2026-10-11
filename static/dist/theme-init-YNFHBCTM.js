@@ -1,0 +1,1 @@
+(()=>{let e;try{e=localStorage.getItem("medical-harness-theme")}catch{}let t=["light","dark"].includes(e)?e:matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t,document.documentElement.style.colorScheme=t})();

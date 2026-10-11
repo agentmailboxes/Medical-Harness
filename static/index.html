@@ -4,184 +4,72 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#ffffff">
-  <meta name="description" content="medical-harness — clear answers to health questions, grounded in medical sources.">
+  <meta name="description" content="medical-harness — clear health information with sources and clinical tools.">
   <title>medical-harness — Ask a health question</title>
-
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
-    }
-  }
-  </script>
-
-  <link rel="stylesheet" href="/static/css/theme.css">
-  <link rel="stylesheet" href="/static/css/layout.css">
-  <link rel="stylesheet" href="/static/css/components.css">
-  <link rel="stylesheet" href="/static/css/anatomy.css">
-  <link rel="stylesheet" href="/static/css/product.css">
-  <link rel="stylesheet" href="/static/css/medical-harness.css">
+  <script src="{{THEME_JS}}"></script>
+  <link rel="stylesheet" href="{{APP_CSS}}">
 </head>
-<body>
-
+<body class="is-home">
+<a class="skip-link" href="#user-input">Skip to question</a>
 <header class="app-header">
-  <div class="header-logo">
-    <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M27.5 11.5a12 12 0 1 0 0 17"/><path d="M23 20h10"/></svg>
-  </div>
-  <div class="header-text">
-    <h1>medical-harness</h1>
-  </div>
-
+  <a class="brand" href="/" aria-label="medical-harness home">
+    <span class="header-logo" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M24 8a11 11 0 1 0 0 16M20 16h9"/></svg></span>
+    <span>medical-harness</span>
+  </a>
   <div class="header-status">
-    <button type="button" class="new-convo-btn" id="new-convo-btn" title="Start a new conversation">
-      <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 2.64-6.36"/><polyline points="3 4 3 12 11 12"/></svg>
-      New question
+    <button type="button" class="new-convo-btn" id="new-convo-btn" aria-label="Start a new question"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.64-6.36M3 4v8h8"/></svg><span>New question</span></button>
+    <button type="button" class="icon-btn theme-toggle" id="theme-toggle-btn" aria-label="Toggle light or dark theme">
+      <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M5 5l1.4 1.4M17.6 17.6L19 19M2 12h2M20 12h2M5 19l1.4-1.4M17.6 6.4L19 5"/></svg>
+      <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>
     </button>
-    <button type="button" class="icon-btn" id="anatomy-header-btn" title="Open 3D body map" aria-label="Open 3D body map">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="4" r="2"/><path d="M12 7v10M7 10l5-3 5 3M9 21l3-4 3 4"/></svg>
-    </button>
-    <button type="button" class="icon-btn theme-toggle" id="theme-toggle-btn" title="Toggle light/dark theme" aria-label="Toggle light/dark theme">
-      <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
-      <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-    </button>
-    <span class="status-pill">
-      <span class="status-dot" id="status-dot"></span>
-      <span class="status-label" id="status-label">Connecting</span>
-    </span>
+    <span class="status-pill" role="status"><span class="status-dot" id="status-dot"></span><span id="status-label">Connecting</span></span>
   </div>
 </header>
-
 <div class="main-layout">
-  <!-- Chat Area -->
   <div class="chat-area">
     <main id="chat-container" aria-label="Health conversation">
-      <div class="chat-scroll-inner" id="chat-scroll-inner"></div>
+      <div class="chat-scroll-inner" id="chat-scroll-inner">
+        <section class="hero" id="hero">
+          <h2>What would you like to know?</h2>
+          <p class="hero-value-prop">Ask a health question. Get a clear answer with sources.</p>
+        </section>
+      </div>
     </main>
-
     <div class="input-area-wrapper">
       <div class="input-inner">
-        <div class="composer-label">Ask another question</div>
+        <label class="composer-label" for="user-input">Ask another question</label>
         <div id="input-area">
           <textarea id="user-input" placeholder="Ask a health question" rows="1" maxlength="8000" aria-label="Ask a health question"></textarea>
           <button type="button" id="stop-btn" class="stop-btn" hidden>Stop</button>
-          <button type="button" id="send-btn" aria-label="Send message">
-            <svg viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></svg>
-            <span class="btn-spinner" aria-hidden="true" inert></span>
-          </button>
+          <button type="button" id="send-btn" aria-label="Send message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg><span class="btn-spinner" aria-hidden="true"></span></button>
         </div>
-        <div class="input-meta-row">
-          <div class="disclaimer-footer">Medical information, not a diagnosis. For emergencies, contact local emergency services.</div>
-          <div class="input-hint"><kbd>Enter</kbd> to send · <kbd>Shift+Enter</kbd> for new line</div>
-        </div>
+        <div class="input-meta-row"><p class="disclaimer-footer">Medical information, not a diagnosis. For emergencies, contact local emergency services.</p><span class="input-hint"><kbd>Enter</kbd> to send · <kbd>Shift+Enter</kbd> for a new line</span></div>
+        <noscript><p>JavaScript is needed to submit a question. For emergencies, contact local emergency services.</p></noscript>
       </div>
     </div>
   </div>
-
-  <!-- Article detail sidebar (slide-in) -->
-  <aside class="article-sidebar" id="article-sidebar" aria-hidden="true" inert>
-    <div class="sidebar-header">
-      <span class="sidebar-title">Source Article</span>
-      <button type="button" class="panel-close" id="article-sidebar-close" aria-label="Close source panel">
-        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
+  <aside class="article-sidebar" id="article-sidebar" aria-label="Source details" aria-hidden="true" inert>
+    <div class="sidebar-header"><span class="sidebar-title">Source article</span><button type="button" class="panel-close" id="article-sidebar-close" aria-label="Close source panel">×</button></div>
     <div class="sidebar-content" id="sidebar-content"></div>
   </aside>
-
-  <!-- Anatomy body map panel (right-hand drawer / mobile bottom-sheet) -->
-  <aside class="anatomy-panel" id="anatomy-panel" aria-hidden="true" inert>
-    <div class="drawer-handle"></div>
-
-    <div class="anatomy-topbar">
-      <div class="anatomy-topbar-title">
-        <svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v1H7a1 1 0 0 0-1 1v3a4 4 0 0 0 1 2.65V20a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-7.35A4 4 0 0 0 18 10V7a1 1 0 0 0-1-1h-2V5a3 3 0 0 0-3-3z"/></svg>
-        <span class="sidebar-title">Body Map</span>
-        <span class="anatomy-region-pill" id="anatomy-region-pill" hidden></span>
-      </div>
-      <button type="button" class="panel-close" id="anatomy-panel-close" aria-label="Close body map">
-        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-
-    <div class="anatomy-search">
-      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="search" id="anatomy-search-input" placeholder="Search a muscle, bone, organ…" autocomplete="off" aria-label="Search anatomy structures">
-      <div class="anatomy-search-results" id="anatomy-search-results" hidden></div>
-    </div>
-
-    <div class="anatomy-breadcrumb" id="anatomy-breadcrumb" hidden></div>
-
-    <div class="anatomy-layer-bar">
-      <button type="button" class="layer-btn active" data-layer="skin">Skin</button>
-      <button type="button" class="layer-btn" data-layer="muscles">Muscles</button>
-      <button type="button" class="layer-btn" data-layer="skeleton">Skeleton</button>
-      <button type="button" class="layer-btn" data-layer="organs">Organs</button>
-      <button type="button" class="layer-btn" data-layer="vascular">Vascular</button>
-      <button type="button" class="layer-btn" data-layer="nerves">Nerves</button>
-      <button type="button" class="layer-btn" data-layer="all">All</button>
-    </div>
-
-    <div class="anatomy-view-bar">
-      <button type="button" class="view-btn" id="anatomy-zoom-in" aria-label="Zoom in">+</button>
-      <button type="button" class="view-btn" id="anatomy-zoom-out" aria-label="Zoom out">−</button>
-      <span class="view-label">View</span>
-      <button type="button" class="view-btn" data-view="front">Front</button>
-      <button type="button" class="view-btn" data-view="back">Back</button>
-      <button type="button" class="view-btn" data-view="left">Left</button>
-      <button type="button" class="view-btn" data-view="right">Right</button>
-      <button type="button" class="view-btn reset" id="anatomy-reset-btn" aria-label="Reset camera">
-        <svg viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-        Reset
-      </button>
-    </div>
-
-    <div class="anatomy-canvas-wrap" id="anatomy-canvas">
-      <div class="anatomy-canvas-hint">Drag to rotate · Pinch or scroll to zoom</div>
-      <div class="anatomy-hover-label" id="anatomy-hover-label"></div>
-      <div class="anatomy-loading" id="anatomy-loading">
-        <span class="spin-ring"></span>
-        Loading 3D viewer…
-      </div>
-      <div class="anatomy-fallback" id="anatomy-fallback">
-        <svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
-        <div class="anatomy-fallback-title">3D viewer unavailable</div>
-        <div class="anatomy-fallback-text">Your browser or device doesn't support WebGL, so the interactive body map can't be shown. You can still describe the affected area in words.</div>
-      </div>
-    </div>
-
-    <div class="anatomy-info" id="anatomy-info-panel">
-      <div class="anatomy-info-empty">
-        <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-        Hover or click any structure — down to a single muscle, bone or organ
-      </div>
-    </div>
-
-    <div class="anatomy-attribution">
-      Educational adult reference model. Not a diagnostic image.<br>3D anatomy: <a href="https://lifesciencedb.jp/bp3d/" target="_blank" rel="noopener">BodyParts3D</a>,
-      © The Database Center for Life Science, licensed under
-      <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC-BY-4.0</a>
-    </div>
-  </aside>
-</div><!-- /main-layout -->
-
+</div>
+<dialog class="atlas-dialog" id="anatomy-panel" aria-labelledby="atlas-title" aria-describedby="atlas-reason">
+  <div class="atlas-header"><div><span class="atlas-eyebrow">REFERENCE ANATOMY</span><h2 id="atlas-title">Anatomy</h2></div><button type="button" class="panel-close" id="anatomy-panel-close" aria-label="Close anatomy">×</button></div>
+  <p id="atlas-reason" class="atlas-reason"></p>
+  <div class="atlas-layers" aria-label="Visible layers"><label><input type="checkbox" data-layer="skeleton" checked>Bones</label><label><input type="checkbox" data-layer="muscles">Muscles</label><label><input type="checkbox" data-layer="organs" checked>Organs</label></div>
+  <div class="atlas-stage">
+    <div id="atlas-canvas"></div>
+    <div class="atlas-status" id="atlas-status" role="status">Loading reference anatomy…</div>
+    <button type="button" class="atlas-retry" id="atlas-retry" hidden>Retry 3D view</button>
+    <span class="atlas-orientation">Anatomical left and right follow the model</span>
+  </div>
+  <div class="atlas-controls" aria-label="Camera controls"><button type="button" data-view="front">Front</button><button type="button" data-view="back">Back</button><button type="button" data-view="side">Side</button><button type="button" id="atlas-zoom-in" aria-label="Zoom in">+</button><button type="button" id="atlas-zoom-out" aria-label="Zoom out">−</button><button type="button" id="atlas-reset">Reset</button></div>
+  <div class="atlas-explorer"><div class="atlas-search-row"><label for="atlas-search">Find a structure</label><span id="atlas-count"></span></div><input id="atlas-search" type="search" placeholder="Search this region" autocomplete="off"><select id="atlas-structures" size="4" aria-label="Structures in this region"></select><p id="atlas-selection" aria-live="polite">Select a structure in the model or list.</p><button type="button" id="atlas-use">Use this area in my question</button></div>
+  <p class="atlas-attribution">Adult reference atlas, including male-specific structures. It does not show your body or diagnose a condition.<br>Adapted from <a href="https://lifesciencedb.jp/bp3d/" target="_blank" rel="noopener noreferrer">BodyParts3D</a>, © DBCLS · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></p>
+</dialog>
 <div class="panel-backdrop" id="panel-backdrop"></div>
-<div class="citation-tooltip" id="citation-tooltip"></div>
-
-<script type="module" src="/static/js/app.js"></script>
-
-<!-- Vercel Web Analytics records page views; medical-harness does not send chat events. -->
-<script>
-  window.va = window.va || function () {
-    (window.vaq = window.vaq || []).push(arguments);
-  };
-</script>
-<script defer src="/_vercel/insights/script.js"></script>
+<div class="citation-tooltip" id="citation-tooltip" role="tooltip"></div>
+<script type="module" src="{{APP_JS}}"></script>
 </body>
 </html>

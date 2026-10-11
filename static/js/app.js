@@ -1,11 +1,12 @@
 import { initTheme, toggleTheme } from './theme.js';
 import {
-  escapeHtml, escapeAttr, renderMarkdown, renderAnswerBody,
+  escapeHtml, escapeAttr, renderMarkdown, renderAnswerBody, safeUrl,
   copyToClipboard, rafThrottle, riskTone, TOOL_FIELD_LABELS,
   toolCardRows, toolHeadline,
 } from './dom-utils.js';
-let ANATOMY_VIEWER_REGIONS = {};
-let anatomyModulePromise = null;
+import { AnatomyPanel } from './anatomy-panel.js';
+const anatomy = new AnatomyPanel(insertAnatomyText);
+const messageAnatomy = new Map();
 
 const chatContainer = document.getElementById('chat-container');
 const chatScrollInner = document.getElementById('chat-scroll-inner');
@@ -15,7 +16,6 @@ const inputArea = document.getElementById('input-area');
 
 const themeToggleBtn = document.getElementById('theme-toggle-btn');
 const newConvoBtn = document.getElementById('new-convo-btn');
-const anatomyHeaderBtn = document.getElementById('anatomy-header-btn');
 const statusDot = document.getElementById('status-dot');
 const statusLabel = document.getElementById('status-label');
 
@@ -23,34 +23,17 @@ const articleSidebar = document.getElementById('article-sidebar');
 const sidebarContent = document.getElementById('sidebar-content');
 const articleSidebarClose = document.getElementById('article-sidebar-close');
 
-const anatomyPanel = document.getElementById('anatomy-panel');
-const anatomyPanelClose = document.getElementById('anatomy-panel-close');
-const anatomyCanvas = document.getElementById('anatomy-canvas');
-const anatomyLoading = document.getElementById('anatomy-loading');
-const anatomyFallback = document.getElementById('anatomy-fallback');
-const anatomyHoverLabel = document.getElementById('anatomy-hover-label');
-const anatomyInfoPanel = document.getElementById('anatomy-info-panel');
-const anatomyRegionPill = document.getElementById('anatomy-region-pill');
-const anatomyLayerBar = document.querySelector('.anatomy-layer-bar');
-
 const panelBackdrop = document.getElementById('panel-backdrop');
 const citationTooltip = document.getElementById('citation-tooltip');
 
 let conversationId = null;
 let conversation = [];
 let currentArticles = [];
-let currentAnatomyContext = null;
 let isStreaming = false;
 let activeRequest = null;
 let sessionVersion = 0;
 let activeAnswerInput = null;
-let pendingUserMessage = '';
 let msgCounter = 0;
-
-let anatomyViewer = null;
-let anatomyInitFailed = false;
-let selectedRegionId = null;
-let selectedStructure = null;
 
 const nextMsgId = () => 'm' + (++msgCounter);
 const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -89,6 +72,7 @@ function appendToChat(node) {
 
 function renderHero() {
   document.body.classList.add('is-home');
+  if (document.getElementById('hero')) return;
   const hero = document.createElement('section');
   hero.className = 'hero';
   hero.id = 'hero';
@@ -131,13 +115,6 @@ function appendStep(wrap, message) {
   if (ctr) ctr.innerHTML = `<div class="step-item active" role="status"><span class="step-spinner"></span><span>${escapeHtml(message)}</span></div>`;
 }
 
-function updateStreamingBody(wrap, text) {
-  const body = wrap.querySelector('.answer-body');
-  body.innerHTML = renderAnswerBody(text, undefined, wrap.dataset.msgId) + '<span class="stream-cursor"></span>';
-  const stick = isNearBottom();
-  if (stick) scheduleScroll();
-}
-
 function systemErrorMessage(text, retryText) {
   const wrap = document.createElement('div');
   wrap.className = 'msg system';
@@ -167,6 +144,10 @@ function renderEmergencyBanner(data) {
 }
 
 function renderToolCard(tr) {
+  if (Array.isArray(tr.items)) {
+    const links = tr.items.filter(item => safeUrl(item.url)).map(item => `<li><a href="${escapeAttr(safeUrl(item.url))}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.title)}</a>${item.published ? ` <small>${escapeHtml(item.published)}</small>` : ''}</li>`).join('');
+    return `<section class="tool-card"><div class="tool-card-body"><div class="tool-card-name">${escapeHtml(tr.tool)}</div><p>${escapeHtml(tr.scope || '')}</p>${links ? `<ul>${links}</ul>` : `<p>${escapeHtml(tr.error || 'No matching references were returned. This does not establish safety or absence of evidence.')}</p>`}</div></section>`;
+  }
   const tone = riskTone(tr);
   const [headlineKey, headlineValue, headlineLabel] = toolHeadline(tr);
   const rows = toolCardRows(tr, headlineKey);
@@ -196,6 +177,7 @@ function renderToolCard(tr) {
       ${riskBadge}
       ${rowsHtml}
       ${tr.recommendation ? `<div class="tool-card-recommendation">${escapeHtml(tr.recommendation)}</div>` : ''}
+      ${safeUrl(tr.source) ? `<a class="tool-source" href="${escapeAttr(safeUrl(tr.source))}" target="_blank" rel="noopener noreferrer">Calculator reference ↗</a>` : ''}
       ${tr.error ? `<div class="tool-card-recommendation">${escapeHtml(tr.error)}</div>` : ''}
     </div>
   </div>`;
@@ -217,8 +199,9 @@ function renderSourcesGrid(articles, msgId) {
   return `<details class="sources-section"><summary class="sources-label">${articles.length} medical sources <span>View evidence ↗</span></summary><div class="sources-grid">${cards}</div></details>`;
 }
 
-function anatomyToggleButtonHtml(label = 'View on Body Map') {
-  return `<button type="button" class="anatomy-toggle-btn" data-action="open-anatomy">${svg(ICON.body)}${escapeHtml(label)}</button>`;
+function anatomyToggleButtonHtml(context, msgId) {
+  messageAnatomy.set(msgId, context);
+  return `<button type="button" class="anatomy-toggle-btn" data-action="open-anatomy" data-msg-id="${escapeAttr(msgId)}">${svg(ICON.cube)}<span>Explore ${escapeHtml(context.label.toLowerCase())} in 3D<small>${escapeHtml(context.reason)}</small></span>${svg(ICON.arrowRight)}</button>`;
 }
 
 function renderFollowUpQuestionsList(questions) {
@@ -253,7 +236,6 @@ const messageArticles = new Map();
 const messageAnswerText = new Map();
 
 function finalizeFollowUp(wrap, data, msgId) {
-  currentAnatomyContext = data.anatomy_context?.has_anatomy ? data.anatomy_context : null;
   const msgEl = wrap.querySelector('.msg.assistant');
   let html = '';
   if (data.preliminary_info) {
@@ -267,7 +249,7 @@ function finalizeFollowUp(wrap, data, msgId) {
   }
 
   html += renderFollowUpQuestionsList(data.follow_up_questions || []);
-  if (currentAnatomyContext) html += anatomyToggleButtonHtml('Show on Body Map');
+  if (data.anatomy_context) html += anatomyToggleButtonHtml(data.anatomy_context, msgId);
   msgEl.innerHTML = html;
 
 }
@@ -276,14 +258,13 @@ function finalizeAnswer(wrap, data, msgId) {
   currentArticles = data.articles || [];
   messageArticles.set(msgId, currentArticles);
   messageAnswerText.set(msgId, data.answer || '');
-  currentAnatomyContext = data.anatomy_context?.has_anatomy ? data.anatomy_context : null;
 
   const msgEl = wrap.querySelector('.msg.assistant');
   let html = '';
   if (data.tool_results?.length) html += data.tool_results.map(renderToolCard).join('');
   html += `<div class="answer-body">${renderAnswerBody(data.answer || '', currentArticles, msgId)}</div>`;
   html += renderSourcesGrid(currentArticles, msgId);
-  if (currentAnatomyContext) html += anatomyToggleButtonHtml();
+  if (data.anatomy_context) html += anatomyToggleButtonHtml(data.anatomy_context, msgId);
   if ((data.answer || '').trim()) html += renderMsgActions(msgId);
   msgEl.innerHTML = html;
 
@@ -298,8 +279,7 @@ function handleResult(wrap, msgId, data) {
   } else if (data.type === 'emergency') {
     wrap.remove();
     renderEmergencyBanner(data);
-    currentAnatomyContext = data.anatomy_context?.has_anatomy ? data.anatomy_context : null;
-    conversation.push(((data.emergency_message || '') + (data.answer ? '\n\n' + data.answer : '')).trim());
+      conversation.push(((data.emergency_message || '') + (data.answer ? '\n\n' + data.answer : '')).trim());
   } else if (data.type === 'answer' || data.type === 'conversation') {
     finalizeAnswer(wrap, data, msgId);
     conversation.push(data.answer || '');
@@ -359,7 +339,7 @@ function openArticleSidebar(msgId, idx) {
   html += '</div>';
   if (art.tldr) html += `<div class="sidebar-section"><div class="sidebar-section-label">Summary</div><div class="sidebar-section-content">${escapeHtml(art.tldr)}</div></div>`;
   if (art.authors?.length) html += `<div class="sidebar-section"><div class="sidebar-section-label">Authors</div><div class="sidebar-authors">${escapeHtml(art.authors.join(', '))}</div></div>`;
-  if (art.url) html += `<a class="sidebar-link" href="${escapeAttr(art.url)}" target="_blank" rel="noopener noreferrer">${svg(ICON.link)}View source</a>`;
+  if (safeUrl(art.url)) html += `<a class="sidebar-link" href="${escapeAttr(safeUrl(art.url))}" target="_blank" rel="noopener noreferrer">${svg(ICON.link)}View source</a>`;
   sidebarContent.innerHTML = html;
   articleSidebar.inert = false;
   articleSidebar.classList.add('open');
@@ -381,144 +361,18 @@ function showBackdropIfMobile() {
   panelBackdrop.classList.add('visible');
 }
 function hideBackdropIfNothingOpen() {
-  if (!articleSidebar.classList.contains('open') && !anatomyPanel.classList.contains('open')) {
+  if (!articleSidebar.classList.contains('open') && !anatomy.dialog.open) {
     panelBackdrop.classList.remove('visible');
   }
 }
 
-async function initAnatomyViewerIfNeeded() {
-  if (anatomyViewer || anatomyInitFailed) return;
-  try {
-    anatomyModulePromise ||= import('./anatomy-viewer.js');
-    const { isWebGLAvailable, REGIONS, AnatomyViewer } = await anatomyModulePromise;
-    ANATOMY_VIEWER_REGIONS = REGIONS;
-    if (anatomyViewer) return;
-    if (!isWebGLAvailable()) throw new Error('WebGL unavailable');
-    const accent = getComputedStyle(document.documentElement).getPropertyValue('--brand').trim();
-    anatomyViewer = new AnatomyViewer(anatomyCanvas, { accentColor: accent, reducedMotion });
-    anatomyViewer.onHover(onAnatomyHover);
-    anatomyViewer.onSelect(onAnatomySelect);
-    await anatomyViewer.ready;
-    anatomyLoading.classList.add('hidden');
-    anatomyViewer.setVisible(anatomyPanel.classList.contains('open'));
-  } catch {
-    anatomyInitFailed = true;
-    anatomyLoading.classList.add('hidden');
-    anatomyFallback.classList.add('visible');
-  }
-}
+function closeAnatomyPanel() { anatomy.close(); }
 
-function onAnatomyHover(data) {
-  if (data) {
-    anatomyHoverLabel.textContent = data.label || data.region;
-    anatomyHoverLabel.classList.add('visible');
-  } else {
-    anatomyHoverLabel.classList.remove('visible');
-  }
-}
-
-function anatomySubPartsFor(regionId) {
-  return (currentAnatomyContext?.regions || []).find(r => r.id === regionId)?.sub_parts || [];
-}
-
-function updateAnatomyBreadcrumb(data) {
-  const crumb = document.getElementById('anatomy-breadcrumb');
-  if (!crumb) return;
-  if (!data) { crumb.hidden = true; return; }
-  const regionLabel = ANATOMY_VIEWER_REGIONS[data.region]?.label || data.region;
-  const parts = ['Body', regionLabel];
-  if (data.structureName) parts.push(data.structureName);
-  crumb.innerHTML = parts
-    .map(p => `<span>${escapeHtml(p)}</span>`)
-    .join('<svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>');
-  crumb.hidden = false;
-}
-
-function onAnatomySelect(data) {
-  if (!data || !data.region) return;
-  selectedRegionId = data.region;
-  selectedStructure = data.structureName
-    ? { name: data.structureName, group: data.group, layer: data.layer }
-    : null;
-  const regionLabel = ANATOMY_VIEWER_REGIONS[data.region]?.label || data.region;
-  const label = data.structureName || data.label || regionLabel;
-  const subParts = anatomySubPartsFor(data.region);
-  updateAnatomyBreadcrumb(data);
-
-  let html = `<div class="anatomy-region-header">
-    <div class="anatomy-region-name">${escapeHtml(label)}</div>
-    <div class="anatomy-region-badge">${escapeHtml(data.layer || 'region')}</div>
-  </div>`;
-
-  if (data.structureName) {
-    html += `<div class="anatomy-structure-meta">
-      ${escapeHtml(regionLabel)}${data.group ? ` · part of ${escapeHtml(data.group)}` : ''}
-    </div>`;
-  }
-
-  if (subParts.length) {
-    html += `<div class="anatomy-subparts-label">Narrow it down</div><div class="anatomy-subparts">`;
-    html += subParts.map(sp =>
-      `<button type="button" class="anatomy-subpart" data-action="anatomy-subpart" data-region-label="${escapeAttr(label)}" data-subpart="${escapeAttr(sp)}">${escapeHtml(sp)}</button>`
-    ).join('');
-    html += '</div>';
-  }
-
-  html += `<button type="button" class="anatomy-confirm-btn" data-action="anatomy-confirm">Use this region in my question ${svg(ICON.arrowRight)}</button>`;
-  anatomyInfoPanel.innerHTML = html;
-  anatomyRegionPill.textContent = label;
-  anatomyRegionPill.hidden = false;
-}
-
-function confirmAnatomyRegion() {
-  if (!selectedRegionId) return;
-  const regionLabel = ANATOMY_VIEWER_REGIONS[selectedRegionId]?.label || selectedRegionId;
-  closeAnatomyPanel();
-  if (selectedStructure?.name) {
-    insertAnatomyText(`The issue is in my ${regionLabel}, specifically the ${selectedStructure.name}.`);
-  } else {
-    insertAnatomyText(`The issue is in my ${regionLabel}.`);
-  }
-}
-
-function confirmAnatomySubpart(regionLabel, subPart) {
-  closeAnatomyPanel();
-  insertAnatomyText(`The issue is in my ${regionLabel}, specifically the ${subPart}.`);
-}
-
-async function openAnatomyPanel() {
+function openAnatomyPanel(msgId) {
+  const context = messageAnatomy.get(msgId);
+  if (!context) return;
   closeArticleSidebar();
-  anatomyPanel.classList.add('open');
-  anatomyPanel.setAttribute('aria-hidden', 'false');
-  showBackdropIfMobile();
-  anatomyPanel.inert = false;
-  anatomyPanelClose.focus({ preventScroll: true });
-  await initAnatomyViewerIfNeeded();
-  if (!anatomyPanel.classList.contains('open')) return;
-  anatomyViewer?.setVisible(true);
-
-  if (anatomyViewer && currentAnatomyContext?.regions) {
-    anatomyViewer.highlight(currentAnatomyContext.regions.map(r => r.id));
-    if (currentAnatomyContext.primary_region) {
-      anatomyViewer.focusRegion(currentAnatomyContext.primary_region.id);
-      anatomyRegionPill.textContent = currentAnatomyContext.primary_region.label;
-      anatomyRegionPill.hidden = false;
-    }
-  }
-  setTimeout(() => anatomyViewer?.resize(), 320);
-}
-
-function closeAnatomyPanel() {
-  anatomyViewer?.setVisible(false);
-  anatomyPanel.inert = true;
-  anatomyPanel.classList.remove('open');
-  anatomyPanel.setAttribute('aria-hidden', 'true');
-  hideBackdropIfNothingOpen();
-}
-
-function setAnatomyLayer(layer) {
-  anatomyLayerBar?.querySelectorAll('.layer-btn').forEach(b => b.classList.toggle('active', b.dataset.layer === layer));
-  anatomyViewer?.setLayer(layer);
+  anatomy.open(context);
 }
 
 function setOnlineStatus(online) {
@@ -669,16 +523,13 @@ function startNewConversation() {
   conversationId = null;
   conversation = [];
   currentArticles = [];
-  currentAnatomyContext = null;
-  selectedRegionId = null;
+  messageAnatomy.clear();
   messageArticles.clear();
   messageAnswerText.clear();
   chatScrollInner.innerHTML = '';
   document.querySelectorAll('.followup-section').forEach(el => el.remove());
   closeArticleSidebar();
   closeAnatomyPanel();
-  anatomyRegionPill.hidden = true;
-  anatomyInfoPanel.innerHTML = `<div class="anatomy-info-empty">${svg(ICON.cube)}Hover or click a body region to select it</div>`;
   renderHero();
   userInput.focus({ preventScroll: true });
 }
@@ -707,72 +558,13 @@ userInput.addEventListener('keydown', e => {
 });
 sendBtn.addEventListener('click', () => sendMessage());
 newConvoBtn?.addEventListener('click', startNewConversation);
-anatomyHeaderBtn?.addEventListener('click', openAnatomyPanel);
 
 themeToggleBtn?.addEventListener('click', () => {
   toggleTheme();
-  const accent = getComputedStyle(document.documentElement).getPropertyValue('--brand').trim();
-  if (accent) anatomyViewer?.setAccentColor(accent);
 });
 
 articleSidebarClose?.addEventListener('click', closeArticleSidebar);
-anatomyPanelClose?.addEventListener('click', closeAnatomyPanel);
 panelBackdrop?.addEventListener('click', () => { closeArticleSidebar(); closeAnatomyPanel(); });
-
-anatomyLayerBar?.querySelectorAll('.layer-btn').forEach(btn => {
-  btn.addEventListener('click', () => setAnatomyLayer(btn.dataset.layer));
-});
-const anatomySearchInput = document.getElementById('anatomy-search-input');
-const anatomySearchResults = document.getElementById('anatomy-search-results');
-
-function renderAnatomySearchResults(matches) {
-  if (!anatomySearchResults) return;
-  if (!matches.length) {
-    anatomySearchResults.hidden = true;
-    anatomySearchResults.innerHTML = '';
-    return;
-  }
-  anatomySearchResults.innerHTML = matches.map(m =>
-    `<button type="button" class="anatomy-search-item" data-structure-id="${escapeAttr(m.id)}">
-      <span class="anatomy-search-name">${escapeHtml(m.name)}</span>
-      <span class="anatomy-search-meta">${escapeHtml(m.layer)} · ${escapeHtml(m.regionLabel)}</span>
-    </button>`
-  ).join('');
-  anatomySearchResults.hidden = false;
-}
-
-anatomySearchInput?.addEventListener('input', () => {
-  const q = anatomySearchInput.value;
-  if (!anatomyViewer || q.trim().length < 2) {
-    renderAnatomySearchResults([]);
-    return;
-  }
-  renderAnatomySearchResults(anatomyViewer.search(q, 12));
-});
-
-anatomySearchResults?.addEventListener('click', e => {
-  const item = e.target.closest('.anatomy-search-item');
-  if (!item || !anatomyViewer) return;
-  anatomyViewer.selectStructure(item.dataset.structureId).then(() => {
-    const active = anatomyViewer?.activeLayer;
-    if (active) {
-      anatomyLayerBar?.querySelectorAll('.layer-btn').forEach(b =>
-        b.classList.toggle('active', b.dataset.layer === active));
-    }
-  });
-  renderAnatomySearchResults([]);
-  anatomySearchInput.value = '';
-});
-
-document.addEventListener('click', e => {
-  if (anatomySearchResults && !e.target.closest('.anatomy-search')) {
-    anatomySearchResults.hidden = true;
-  }
-});
-document.querySelectorAll('.view-btn[data-view]').forEach(btn => {
-  btn.addEventListener('click', () => anatomyViewer?.setView(btn.dataset.view));
-});
-document.getElementById('anatomy-reset-btn')?.addEventListener('click', () => anatomyViewer?.resetCamera());
 
 chatContainer.addEventListener('click', e => {
   const el = e.target.closest('[data-action]');
@@ -780,11 +572,6 @@ chatContainer.addEventListener('click', e => {
   const action = el.dataset.action;
 
   switch (action) {
-    case 'hero-chip':
-      userInput.value = el.dataset.value;
-      userInput.focus();
-      userInput.dispatchEvent(new Event('input'));
-      break;
     case 'citation-ref':
       pulseCitationRef(el);
       scrollToSourceCard(el.dataset.msgId, parseInt(el.dataset.idx, 10));
@@ -800,7 +587,7 @@ chatContainer.addEventListener('click', e => {
       handleCopyAnswer(el);
       break;
     case 'open-anatomy':
-      openAnatomyPanel();
+      openAnatomyPanel(el.dataset.msgId);
       break;
     default:
       break;
@@ -816,22 +603,11 @@ chatContainer.addEventListener('mouseout', e => {
   if (el) hideCitationTooltip();
 });
 chatContainer.addEventListener('scroll', hideCitationTooltip);
-anatomyInfoPanel.addEventListener('click', e => {
-  const el = e.target.closest('[data-action]');
-  if (!el) return;
-  if (el.dataset.action === 'anatomy-confirm') confirmAnatomyRegion();
-  else if (el.dataset.action === 'anatomy-subpart') confirmAnatomySubpart(el.dataset.regionLabel, el.dataset.subpart);
-});
-
 initTheme();
 renderHero();
-userInput.focus({ preventScroll: true });
-fetch('/api/health').then(r => setOnlineStatus(r.ok)).catch(() => setOnlineStatus(false));
+fetch('/api/health', { signal: AbortSignal.timeout(10000) }).then(r => setOnlineStatus(r.ok)).catch(() => setOnlineStatus(false));
 
 document.getElementById('stop-btn').addEventListener('click', () => activeRequest?.abort());
-document.getElementById('anatomy-zoom-in').addEventListener('click', () => anatomyViewer?.zoom(0.8));
-document.getElementById('anatomy-zoom-out').addEventListener('click', () => anatomyViewer?.zoom(1.25));
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') { closeArticleSidebar(); closeAnatomyPanel(); userInput.focus(); }
 });
-document.addEventListener('visibilitychange', () => anatomyViewer?.setVisible(!document.hidden && anatomyPanel.classList.contains('open')));

@@ -1,57 +1,39 @@
 # Architecture
 
-medical-harness serves one browser application and one FastAPI backend. The frontend is plain HTML, CSS, and JavaScript; the anatomy viewer loads three.js from a CDN. There is no Node build step or persistent database.
+medical-harness serves a FastAPI backend and plain HTML/CSS/JavaScript frontend. esbuild produces checked-in, self-hosted bundles. Node is a development dependency; production needs Python 3.12+ and the static files. There is no account system, database, or durable conversation store.
 
-```mermaid
-flowchart LR
-    Browser[Browser UI] -->|POST /api/chat/stream| API[FastAPI routes]
-    API --> Pipeline[AgentPipeline]
-    Pipeline --> Triage[Triage and clarification]
-    Pipeline --> Tools[Clinical calculators]
-    Pipeline --> Evidence[MediSearch retrieval]
-    Pipeline --> Answer[Cerebras answer generation]
-    Answer --> Review[Safety review]
-    Review -->|SSE result| Browser
-    Browser --> Anatomy[3D anatomy assets]
-```
+## Request flow
 
-## One question, step by step
+1. Routes validate alternating messages, body size, aggregate text size, rate and concurrency limits. They attach a random browser-session cache scope and enforce a total deadline. SSE sends keep-alives and cancels pending work on disconnect. Buffered and streamed results share ChatResponse validation.
+2. Triage runs first. Emergencies stop normal work and return fixed urgent guidance. Routine messages receive fixed nonclinical replies. Clarification asks up to three essential questions and is limited to one round. Anatomy intent is part of triage, eliminating a separate model call; only twelve validated scene IDs are accepted.
+3. Tool planning and MediSearch retrieval run concurrently. At most two relevant tools execute, with concurrent input extraction and reference requests. Calculators require supplied values and validate types, finite numbers, ranges and enums. Reference requests use fixed endpoints, eight-second total timeouts, at most three records, and a 256 KiB decoded response cap.
+4. Supplemental PubMed abstracts may join the bounded source list or supply evidence when the primary provider is unavailable. Directory-only medicine labels cannot. When abstracts alter source numbering, the primary summary is dropped to avoid stale citation indices. No sources means a fixed evidence-unavailable response.
+5. Generation is buffered. Review sees source excerpts and tool outputs. A revision is allowed once and must pass another review. Empty, interrupted, oversized or invalidly cited answers fail closed. The browser renders only the authoritative result.
 
-1. `static/js/app.js` sends the conversation to `POST /api/chat/stream`. The UI also manages the theme, messages, citation panels, and anatomy drawer.
-2. `app/api/routes.py` validates the alternating conversation, sets a per-request cache scope, enforces concurrency and a timeout, and streams events. `app/main.py` sets up middleware, provider clients, and the pipeline during startup.
-3. `AgentPipeline.run_streaming()` first asks Cerebras to classify the latest turn in context as `emergency`, `ask`, `answer`, or `conversation`. An emergency result stops the normal pipeline. A `conversation` result gives a fixed, nonclinical reply without retrieval. An `ask` result returns up to three clarification questions; only one clarification round is allowed.
-4. For an answer, tool selection and MediSearch retrieval run concurrently. Selected calculators execute deterministic Python functions from `app/tools/clinical.py`; the model extracts input variables but does not calculate scores.
-5. If no source articles arrive, the pipeline returns an evidence-unavailable answer. Otherwise it generates an answer, runs a separate safety review, and only then emits the reviewed answer and final result. The current implementation does **not** send unreviewed tokens to the browser.
-6. The browser renders articles, calculator results, follow-up suggestions, and anatomy context. `static/js/anatomy-viewer.js` loads the layered GLB assets on demand.
+These checks validate control flow and citation indices, not clinical truth.
 
-## Main modules
+## Lifecycle and caches
+
+HTTP clients are pooled and closed on shutdown. Provider calls have bounded retries and circuit breakers with one recovery probe after cooldown. Session-scoped TTL/LRU caches coalesce identical work. One cancelled waiter cannot disrupt others; the final waiter's cancellation stops the shared operation. Failed evidence/reference retrieval is not cached. Zero capacity or TTL disables storage.
+
+Cache values contain sensitive derived data in memory; expired entries are removed during cache operations. No prompts, patient text or keys belong in logs. Protected metrics expose numeric counters only. Caches, concurrency and quotas are per instance; global limits require platform infrastructure.
+
+## Browser and anatomy
+
+The initial response already contains the home screen and home layout. A small synchronous theme script runs before CSS; startup does not replace the hero. HTML/manifests revalidate, while hashed bundles and GLBs use immutable caching. The app uses system fonts and no CDN runtime scripts. FastAPI developer documentation has a separate CSP for its Swagger/ReDoc assets.
+
+Anatomy context belongs to each answer. Opening its native dialog imports the viewer and downloads one region. Closing aborts loads and disposes geometry, materials, observers, listeners and WebGL resources. Rendering occurs on interaction or resize, not continuously. Keyboard controls and a searchable structure list remain usable after graphics failure.
 
 | Module | Responsibility |
 | --- | --- |
-| `app/config.py` | Validated environment settings with `.env` support |
-| `app/main.py` | App factory, lifecycle, middleware, HTML and static routes |
-| `app/api/routes.py` | Buffered and SSE chat, health, protected metrics |
-| `app/pipeline.py` | Agent control flow, step and evidence caching |
-| `app/prompts.py` | Triage, tool, answer, and review instructions |
-| `app/llm.py` | Async Cerebras calls and usage accounting |
-| `app/evidence.py` | Async MediSearch SSE retrieval and retry |
-| `app/cache.py` | In-memory TTL/LRU cache keyed by conversation hash and session scope |
-| `app/rate_limit.py` | In-memory per-client request limiter |
-| `app/tools/clinical.py` | Calculator registry and pure Python math |
-| `app/tools/anatomy.py` | Question-to-anatomy region mapping |
+| app/main.py | Startup/shutdown, headers, static shell |
+| app/api/routes.py, app/schemas.py | HTTP/SSE contract and validation |
+| app/pipeline.py, app/prompts.py | Bounded orchestration and reviewed answer policy |
+| app/cache.py, app/transport.py | TTL/LRU, single-flight and circuit breakers |
+| app/tools/clinical.py | Seven sourced calculators/converters |
+| app/tools/references.py | DailyMed and Europe PMC lookups |
+| static/js/anatomy-panel.js, atlas-viewer.js | Dialog and on-demand Three.js viewer |
+| scripts/build_atlas.mjs, check_atlas.mjs | Reproducible packs and decoded geometry validation |
+| evals/ | Synthetic evaluations and an offline review gate |
 
-## Safety and failure behavior
-
-Triage precedes normal answering. Exact first-turn greetings and other routine messages can override an unnecessary medical clarification after emergency triage. Evidence is required for a sourced medical answer; retrieval failure produces an explicit limitation. Conversational replies make no medical claims and do not require retrieval. The answer review can accept or revise a medical answer, and a failed review stops the answer path. The UI and API show emergency guidance separately from normal answers. These are application safeguards, not proof of clinical validity.
-
-The caches and rate limiter live in each process. On Vercel, different Function instances do not share them. medical-harness has no user accounts, database, or durable conversation history. The browser holds the conversation during the page session and sends it with each request.
-
-## Where to make a change
-
-- New API field: `app/schemas.py` → `app/api/routes.py` → `static/js/app.js` → [API documentation](API.md).
-- New calculator: register a pure function in `app/tools/clinical.py`, test it, then update prompt/tool descriptions and this guide.
-- New provider behavior: edit `app/llm.py` or `app/evidence.py`, preserve safe failure paths, and add mocked tests.
-- UI or theme: edit `static/index.html`, `static/js/`, and `static/css/`; check mobile and both themes.
-- Anatomy assets: use `scripts/build_anatomy_assets.py` and preserve [attribution](../NOTICE.md).
-
-The older `BLUEPRINT.md` has been retired because it described behavior that diverged from the running code. This guide and the source are the current references.
+See [research decisions](RESEARCH.md), [tool boundaries](RELIABILITY.md), and [performance checks](PERFORMANCE.md).

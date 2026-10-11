@@ -1,0 +1,20 @@
+{
+  "name": "medical-harness",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build_frontend.mjs",
+    "build:anatomy": "node scripts/build_atlas.mjs",
+    "check:anatomy": "node scripts/check_atlas.mjs",
+    "test:browser": "playwright test"
+  },
+  "devDependencies": {
+    "@gltf-transform/core": "4.2.1",
+    "@gltf-transform/extensions": "4.2.1",
+    "@gltf-transform/functions": "4.2.1",
+    "@playwright/test": "1.56.1",
+    "esbuild": "0.25.12",
+    "meshoptimizer": "0.23.0",
+    "three": "0.170.0"
+  }
+}
