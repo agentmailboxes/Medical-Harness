@@ -1,5 +1,3 @@
-"""FastAPI application factory — serves the agent API and the static frontend."""
-
 from __future__ import annotations
 
 import logging
@@ -8,7 +6,6 @@ import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -21,6 +18,7 @@ from app.config import get_settings
 from app.evidence import EvidenceRetriever
 from app.llm import CerebrasClient
 from app.logging_conf import setup_logging
+from app.middleware import RequestSizeMiddleware
 from app.pipeline import AgentPipeline
 from app.rate_limit import RateLimitMiddleware
 
@@ -30,7 +28,6 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
 def create_app() -> FastAPI:
-    load_dotenv()
     settings = get_settings()
     setup_logging(settings.log_level)
 
@@ -49,14 +46,18 @@ def create_app() -> FastAPI:
         evidence = EvidenceRetriever(api_key=settings.medisearch_api_key)
         app.state.request_slots = asyncio.Semaphore(settings.max_concurrent_requests)
         app.state.llm = llm
-        app.state.pipeline = AgentPipeline(llm=llm, evidence=evidence)
+        pipeline = AgentPipeline(llm=llm, evidence=evidence)
+        app.state.pipeline = pipeline
         logger.info("startup complete model=%s version=%s", settings.cerebras_model, __version__)
-        yield
-        await llm.aclose()
-        await evidence.aclose()
+        try:
+            yield
+        finally:
+            await pipeline.aclose()
+            await asyncio.gather(llm.aclose(), evidence.aclose())
 
     app = FastAPI(title="medical-harness", version=__version__, lifespan=lifespan)
 
+    app.add_middleware(RequestSizeMiddleware, max_bytes=settings.max_request_bytes)
     app.add_middleware(GZipMiddleware, minimum_size=1024)
     app.add_middleware(
         RateLimitMiddleware,
@@ -89,7 +90,7 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception):
-        logger.exception("unhandled error path=%s", request.url.path)
+        logger.error("unhandled error kind=%s", type(exc).__name__)
         return JSONResponse(
             status_code=500,
             content={"detail": "Internal server error. Please try again."},
@@ -109,7 +110,7 @@ app = create_app()
 
 
 def run() -> None:
-    """Entry point for `uv run medical-harness`."""
+
     import uvicorn
 
     settings = get_settings()

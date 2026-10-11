@@ -1,5 +1,3 @@
-"""Tests for robust LLM JSON parsing."""
-
 import pytest
 
 from app.json_utils import parse_json_response

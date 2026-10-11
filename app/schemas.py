@@ -1,10 +1,10 @@
-"""Request / response models."""
-
 from __future__ import annotations
 
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+from app.tools.anatomy import AnatomyContext
 
 
 class ChatRequest(BaseModel):
@@ -21,7 +21,7 @@ class ChatResponse(BaseModel):
     tool_results: list[dict] = []
     followups: list[str] = []
     conversation_id: str
-    anatomy_context: dict | None = None
+    anatomy_context: AnatomyContext | None = None
     evidence_status: str = "available"
     emergency: bool = False
     emergency_message: str = ""

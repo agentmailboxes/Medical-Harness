@@ -11,11 +11,11 @@ from tests.test_pipeline import make_pipeline, collect, FakeEvidence, SAFETY_KEY
 
 
 async def test_only_reviewed_revision_reaches_stream():
-    pipeline = make_pipeline({"action": "answer"}, safety={"is_safe": False, "revised_answer": "Reviewed answer."})
+    pipeline = make_pipeline({"action": "answer"}, safety={"is_safe": False, "revised_answer": "Reviewed answer [1]."})
     events = await collect(pipeline, ["What is flu?"])
     chunks = [data["text"] for kind, data in events if kind == "answer_chunk"]
-    assert chunks == ["Reviewed answer."]
-    assert events[-1][1]["answer"] == "Reviewed answer."
+    assert chunks == ["Reviewed answer [1]."]
+    assert events[-1][1]["answer"] == "Reviewed answer [1]."
 
 
 @pytest.mark.parametrize("review", [{}, {"is_safe": "true"}, {"is_safe": False}, {"is_safe": False, "revised_answer": ""}])

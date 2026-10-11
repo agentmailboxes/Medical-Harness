@@ -1,9 +1,3 @@
-"""Cerebras LLM client — async, OpenAI-compatible chat completions.
-
-Uses httpx with retry + exponential backoff on transient failures
-(429, 5xx, timeouts). Supports both buffered and streaming generation.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -14,198 +8,163 @@ from collections.abc import AsyncIterator
 
 import httpx
 
-logger = logging.getLogger(__name__)
+from app.transport import CircuitBreaker
 
+logger = logging.getLogger(__name__)
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
 
 def _retry_delay(exc: Exception, attempt: int) -> float:
-    """Exponential backoff with jitter, honoring Retry-After when present."""
     response = getattr(exc, "response", None)
     if response is not None:
-        retry_after = response.headers.get("retry-after")
-        if retry_after:
-            try:
-                return min(float(retry_after) + random.random(), 30.0)
-            except ValueError:
-                pass
-    return min(2 ** attempt + random.random(), 15.0)
+        try:
+            return max(0, min(float(response.headers.get("retry-after", "")), 15)) + random.random()
+        except ValueError:
+            pass
+    return min(2 ** attempt + random.random(), 8)
+
+
+def _retryable(exc):
+    return isinstance(exc, httpx.TransportError) or (
+        isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in _RETRYABLE_STATUS
+    )
 
 
 class LLMError(RuntimeError):
-    """Raised when the LLM call fails after all retries."""
+    pass
 
 
 class CerebrasClient:
-    def __init__(
-        self,
-        api_key: str,
-        model: str = "gpt-oss-120b",
-        base_url: str = "https://api.cerebras.ai/v1",
-        temperature: float = 0.3,
-        max_tokens: int = 4096,
-        timeout_seconds: float = 90.0,
-        max_retries: int = 3,
-        prompt_cache_key: str = "",
-    ):
+    def __init__(self, api_key: str, model="gpt-oss-120b", base_url="https://api.cerebras.ai/v1",
+                 temperature=0.3, max_tokens=4096, timeout_seconds=45, max_retries=2,
+                 prompt_cache_key=""):
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.max_retries = max_retries
         self.prompt_cache_key = prompt_cache_key
-        # Cumulative usage counters (PHI-free, exposed via /api/metrics).
         self.total_requests = 0
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
         self.total_cached_tokens = 0
+        self.circuit = CircuitBreaker()
         self._client = httpx.AsyncClient(
-            base_url=base_url,
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=httpx.Timeout(timeout_seconds, connect=10.0),
+            base_url=base_url, headers={"Authorization": f"Bearer {api_key}"},
+            timeout=httpx.Timeout(timeout_seconds, connect=5, pool=5),
+            limits=httpx.Limits(max_connections=32, max_keepalive_connections=16),
         )
 
-    async def aclose(self) -> None:
+    async def aclose(self):
         await self._client.aclose()
 
-    def usage_stats(self) -> dict:
-        prompt = self.total_prompt_tokens
+    def usage_stats(self):
         return {
-            "requests": self.total_requests,
-            "prompt_tokens": prompt,
-            "completion_tokens": self.total_completion_tokens,
-            "cached_tokens": self.total_cached_tokens,
-            "prompt_cache_hit_ratio": (
-                round(self.total_cached_tokens / prompt, 4) if prompt else 0.0
-            ),
+            "requests": self.total_requests, "prompt_tokens": self.total_prompt_tokens,
+            "completion_tokens": self.total_completion_tokens, "cached_tokens": self.total_cached_tokens,
+            "prompt_cache_hit_ratio": round(self.total_cached_tokens / self.total_prompt_tokens, 4) if self.total_prompt_tokens else 0,
+            "circuit_open": self.circuit.opened_at is not None,
         }
 
-    def _record_usage(self, usage: dict | None) -> None:
-        if not usage:
-            return
-        prompt = usage.get("prompt_tokens") or 0
-        completion = usage.get("completion_tokens") or 0
-        cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0
-        self.total_prompt_tokens += prompt
-        self.total_completion_tokens += completion
-        self.total_cached_tokens += cached
-        logger.info(
-            "llm.usage prompt_tokens=%d completion_tokens=%d cached_tokens=%d",
-            prompt, completion, cached,
-        )
+    def _record_usage(self, usage):
+        if isinstance(usage, dict):
+            self.total_prompt_tokens += usage.get("prompt_tokens") or 0
+            self.total_completion_tokens += usage.get("completion_tokens") or 0
+            self.total_cached_tokens += (usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0
 
-    def _payload(self, user: str, system: str | None, *, stream: bool = False) -> dict:
-        # Static system message FIRST so Cerebras prefix caching (exact-match,
-        # 128-token blocks) can reuse it across requests; dynamic content last.
-        messages = []
-        if system:
-            messages.append({"role": "system", "content": system})
+    def _payload(self, user, system, *, stream=False, max_tokens=None, json_mode=False):
+        messages = ([{"role": "system", "content": system}] if system else [])
         messages.append({"role": "user", "content": user})
         payload = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
-            "stream": stream,
+            "model": self.model, "messages": messages, "temperature": 0 if json_mode else self.temperature,
+            "max_tokens": max_tokens or self.max_tokens, "stream": stream,
         }
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
         if stream:
             payload["stream_options"] = {"include_usage": True}
         if self.prompt_cache_key:
             payload["prompt_cache_key"] = self.prompt_cache_key
         return payload
 
-    async def generate(self, user: str, system: str | None = None) -> str:
-        """Buffered completion. Retries transient failures with backoff."""
-        last_exc: Exception | None = None
-        for attempt in range(1, self.max_retries + 1):
-            try:
-                self.total_requests += 1
-                resp = await self._client.post(
-                    "/chat/completions", json=self._payload(user, system)
-                )
-                if resp.status_code in _RETRYABLE_STATUS:
-                    raise httpx.HTTPStatusError(
-                        f"retryable status {resp.status_code}",
-                        request=resp.request,
-                        response=resp,
-                    )
-                resp.raise_for_status()
-                data = resp.json()
-                text = data["choices"][0]["message"]["content"] or ""
-                self._record_usage(data.get("usage"))
-                logger.info(
-                    "llm.generate ok model=%s prompt_chars=%d response_chars=%d",
-                    self.model, len(user) + len(system or ""), len(text),
-                )
-                return text
-            except (httpx.TimeoutException, httpx.HTTPStatusError, httpx.TransportError) as exc:
-                last_exc = exc
-                status = getattr(getattr(exc, "response", None), "status_code", None)
-                if status is not None and status not in _RETRYABLE_STATUS:
-                    logger.error("llm.generate non-retryable status=%s", status)
-                    raise LLMError(f"LLM request failed with status {status}") from exc
-                if attempt < self.max_retries:
-                    delay = _retry_delay(exc, attempt)
-                    logger.warning(
-                        "llm.generate retry attempt=%d/%d delay=%.1fs cause=%s",
-                        attempt, self.max_retries, delay, type(exc).__name__,
-                    )
-                    await asyncio.sleep(delay)
-        logger.error("llm.generate exhausted retries")
-        raise LLMError("LLM request failed after retries") from last_exc
+    async def generate(self, user, system=None, *, max_tokens=None, json_mode=False):
+        self.circuit.acquire()
+        try:
+            for attempt in range(self.max_retries):
+                try:
+                    self.total_requests += 1
+                    response = await self._client.post("/chat/completions", json=self._payload(
+                        user, system, max_tokens=max_tokens, json_mode=json_mode,
+                    ))
+                    response.raise_for_status()
+                    data = response.json()
+                    choice = data["choices"][0]
+                    if choice.get("finish_reason") != "stop":
+                        raise LLMError("Incomplete completion")
+                    value = choice["message"]["content"]
+                    if not isinstance(value, str) or not value.strip() or len(value) > 64000:
+                        raise LLMError("Invalid completion")
+                    self._record_usage(data.get("usage"))
+                    self.circuit.success()
+                    return value
+                except httpx.HTTPError as exc:
+                    if not _retryable(exc) or attempt + 1 == self.max_retries:
+                        raise LLMError("Provider request unavailable") from None
+                    await asyncio.sleep(_retry_delay(exc, attempt))
+            raise LLMError("Provider request unavailable")
+        except asyncio.CancelledError:
+            self.circuit.cancel()
+            raise
+        except Exception:
+            self.circuit.failure()
+            raise LLMError("Provider response unavailable") from None
 
-    async def generate_stream(
-        self, user: str, system: str | None = None
-    ) -> AsyncIterator[str]:
-        """Streaming completion — yields text chunks as they arrive.
-
-        Retries only apply before the first chunk is emitted.
-        """
-        last_exc: Exception | None = None
-        for attempt in range(1, self.max_retries + 1):
-            emitted = False
-            try:
-                self.total_requests += 1
-                async with self._client.stream(
-                    "POST", "/chat/completions",
-                    json=self._payload(user, system, stream=True),
-                ) as resp:
-                    if resp.status_code in _RETRYABLE_STATUS:
-                        raise httpx.HTTPStatusError(
-                            f"retryable status {resp.status_code}",
-                            request=resp.request,
-                            response=resp,
-                        )
-                    resp.raise_for_status()
-                    async for line in resp.aiter_lines():
-                        if not line.startswith("data:"):
-                            continue
-                        payload = line[5:].strip()
-                        if payload == "[DONE]":
-                            return
-                        try:
+    async def generate_stream(self, user, system=None) -> AsyncIterator[str]:
+        self.circuit.acquire()
+        try:
+            for attempt in range(self.max_retries):
+                emitted = False
+                finished = False
+                chars = 0
+                try:
+                    self.total_requests += 1
+                    async with self._client.stream("POST", "/chat/completions", json=self._payload(user, system, stream=True)) as response:
+                        response.raise_for_status()
+                        async for line in response.aiter_lines():
+                            if not line.startswith("data:"):
+                                continue
+                            payload = line[5:].strip()
+                            if payload == "[DONE]":
+                                break
                             chunk = json.loads(payload)
-                        except json.JSONDecodeError:
-                            continue
-                        if chunk.get("usage"):
-                            # Final chunk (stream_options.include_usage).
-                            self._record_usage(chunk["usage"])
-                        choices = chunk.get("choices") or [{}]
-                        delta = choices[0].get("delta", {}).get("content")
-                        if delta:
-                            emitted = True
-                            yield delta
-                return
-            except (httpx.TimeoutException, httpx.HTTPStatusError, httpx.TransportError) as exc:
-                last_exc = exc
-                if emitted:
-                    # Mid-stream failure: cannot safely retry (would duplicate text).
-                    logger.error("llm.generate_stream mid-stream failure: %s", exc)
-                    raise LLMError("LLM stream interrupted") from exc
-                if attempt < self.max_retries:
-                    delay = _retry_delay(exc, attempt)
-                    logger.warning(
-                        "llm.generate_stream retry attempt=%d/%d delay=%.1fs cause=%s",
-                        attempt, self.max_retries, delay, type(exc).__name__,
-                    )
-                    await asyncio.sleep(delay)
-        raise LLMError("LLM stream failed after retries") from last_exc
+                            if "error" in chunk:
+                                raise LLMError("Provider stream unavailable")
+                            self._record_usage(chunk.get("usage"))
+                            for choice in chunk.get("choices", []):
+                                reason = choice.get("finish_reason")
+                                if reason is not None:
+                                    if reason != "stop":
+                                        raise LLMError("Incomplete completion")
+                                    finished = True
+                                delta = choice.get("delta", {}).get("content")
+                                if delta:
+                                    if not isinstance(delta, str):
+                                        raise LLMError("Invalid stream content")
+                                    chars += len(delta)
+                                    if chars > 64000:
+                                        raise LLMError("Completion too long")
+                                    emitted = True
+                                    yield delta
+                    if not finished or not emitted:
+                        raise LLMError("Stream ended before completion")
+                    self.circuit.success()
+                    return
+                except httpx.HTTPError as exc:
+                    if emitted or not _retryable(exc) or attempt + 1 == self.max_retries:
+                        raise LLMError("Provider stream unavailable") from None
+                    await asyncio.sleep(_retry_delay(exc, attempt))
+        except (asyncio.CancelledError, GeneratorExit):
+            self.circuit.cancel()
+            raise
+        except Exception:
+            self.circuit.failure()
+            raise LLMError("Provider stream unavailable") from None

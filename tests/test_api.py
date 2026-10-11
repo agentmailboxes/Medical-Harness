@@ -1,5 +1,3 @@
-"""API-level tests with a mocked pipeline."""
-
 import json
 import os
 
@@ -9,10 +7,10 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("CEREBRAS_API_KEY", "test-key")
 os.environ.setdefault("MEDISEARCH_API_KEY", "test-key")
 
-from app.main import create_app  # noqa: E402
+from app.main import create_app
 
 
-from app.cache import TTLCache  # noqa: E402
+from app.cache import TTLCache
 
 
 class FakePipeline:
@@ -69,9 +67,9 @@ def test_metrics_numbers_only(client, monkeypatch):
     llm = body["llm"]
     assert set(llm) == {
         "requests", "prompt_tokens", "completion_tokens",
-        "cached_tokens", "prompt_cache_hit_ratio",
+        "cached_tokens", "prompt_cache_hit_ratio", "circuit_open",
     }
-    # PHI-free contract: every value is a plain number.
+
     for section in body.values():
         for value in section.values():
             assert isinstance(value, (int, float))
@@ -124,7 +122,7 @@ def test_conversation_response_in_buffered_and_streaming_api(client):
 
 def test_chat_rejects_empty_conversation(client):
     resp = client.post("/api/chat", json={"conversation": []})
-    assert resp.status_code == 422  # pydantic min_length
+    assert resp.status_code == 422
 
 
 def test_chat_rejects_even_message_count(client):
@@ -153,7 +151,7 @@ def test_chat_stream_sse_events(client):
     assert "event: step" in raw
     assert "event: answer_chunk" in raw
     assert "event: result" in raw
-    # result payload parses and matches contract
+
     for block in raw.split("\n\n"):
         if block.startswith("event: result"):
             data_line = [l for l in block.split("\n") if l.startswith("data:")][0]
@@ -178,3 +176,13 @@ def test_spoofed_forwarded_header_does_not_reset_rate_limit(client, monkeypatch)
         response = client.post("/api/chat", json={"conversation": ["Question"]}, headers={"X-Forwarded-For": f"192.0.2.{i}"})
         assert response.status_code == 200
     assert client.post("/api/chat", json={"conversation": ["Question"]}, headers={"X-Forwarded-For": "203.0.113.1"}).status_code == 429
+
+
+def test_aggregate_conversation_budget(client):
+    response = client.post("/api/chat", json={"conversation": ["x" * 7000] * 5})
+    assert response.status_code == 413
+
+
+def test_request_body_budget(client):
+    response = client.post("/api/chat", content=b"x" * 300000, headers={"Content-Type": "application/json"})
+    assert response.status_code == 413

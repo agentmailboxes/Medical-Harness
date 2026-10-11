@@ -4,6 +4,7 @@ import asyncio
 import logging
 import time
 import inspect
+import re
 from contextvars import ContextVar
 from collections import Counter
 from collections.abc import AsyncIterator
@@ -17,8 +18,6 @@ from app.llm import CerebrasClient
 from app.prompts import (
     ANSWER_SYSTEM,
     ANSWER_USER,
-    EMERGENCY_GUIDANCE_SYSTEM,
-    EMERGENCY_GUIDANCE_USER,
     SAFETY_SYSTEM,
     SAFETY_USER,
     TOOL_SELECTION_SYSTEM,
@@ -28,7 +27,7 @@ from app.prompts import (
     VARIABLE_EXTRACTION_SYSTEM,
     VARIABLE_EXTRACTION_USER,
 )
-from app.tools.anatomy import detect_anatomy_context
+from app.tools.anatomy import select_anatomy
 from app.tools.clinical import TOOL_REGISTRY
 
 logger = logging.getLogger(__name__)
@@ -53,6 +52,7 @@ def _empty_result(**overrides) -> dict:
         "tool_results": [],
         "followups": [],
         "anatomy_context": None,
+        "evidence_status": "not_applicable",
         "emergency": False,
         "emergency_message": "",
     }
@@ -83,6 +83,7 @@ class AgentPipeline:
         self.max_evidence_articles = settings.max_evidence_articles
         self.max_tldr_chars = settings.max_tldr_chars
         self.max_summary_chars = settings.max_summary_chars
+        self.max_answer_chars = settings.max_answer_chars
         self.step_cache = step_cache if step_cache is not None else TTLCache(
             max_entries=settings.step_cache_entries,
             ttl_seconds=settings.step_cache_ttl_seconds,
@@ -92,20 +93,21 @@ class AgentPipeline:
             ttl_seconds=settings.evidence_cache_ttl_seconds,
         )
         self._outcomes: Counter[str] = Counter()
-        # Formatted ONCE with the static tool registry so the system message
-        # stays byte-identical across requests (prefix-cache friendly).
+        self.policy_version = text_key(TRIAGE_SYSTEM, TOOL_SELECTION_SYSTEM, VARIABLE_EXTRACTION_SYSTEM, ANSWER_SYSTEM, SAFETY_SYSTEM)
+
+
         self.tool_selection_system = TOOL_SELECTION_SYSTEM.format(
             tool_descriptions="\n".join(
                 f"- {key}: {info['description']}" for key, info in TOOL_REGISTRY.items()
             )
         )
 
-    # ------------------------------------------------------------------
-    # Public entry points
-    # ------------------------------------------------------------------
+
+
+
 
     async def run(self, conversation: list[str], conversation_id: str) -> dict:
-        """Execute the pipeline and return only the final result dict."""
+
         result: dict | None = None
         async for event_type, data in self.run_streaming(conversation, conversation_id):
             if event_type == "result":
@@ -116,7 +118,7 @@ class AgentPipeline:
     async def run_streaming(
         self, conversation: list[str], conversation_id: str
     ) -> AsyncIterator[tuple[str, dict]]:
-        """Yield (event_type, data) tuples: step / answer_chunk / result."""
+
         t0 = time.monotonic()
         conv_text = self._format_conversation(conversation)
 
@@ -132,8 +134,8 @@ class AgentPipeline:
             ))
             return
 
-        # Exact routine messages override an over-eager "ask" classification.
-        # The emergency decision above always takes precedence.
+
+
         conversation_kind = routine_kind(conversation[-1]) if len(conversation) == 1 else None
         if conversation_kind is None and action == "conversation":
             conversation_kind = triage["conversation_kind"]
@@ -146,7 +148,7 @@ class AgentPipeline:
             ))
             return
 
-        # --- Follow-up questions path ---
+
         prior_asks = self._count_prior_clarifications(conversation)
         if action == "ask" and triage.get("follow_up_questions"):
             if prior_asks >= self.MAX_CLARIFICATIONS:
@@ -155,10 +157,10 @@ class AgentPipeline:
                     prior_asks, self.MAX_CLARIFICATIONS,
                 )
             else:
-                anatomy_context = await self._detect_anatomy(conv_text)
+                anatomy_context = select_anatomy(triage.get("anatomy"))
                 logger.info(
-                    "pipeline.follow_up conversation_id=%s elapsed=%.1fs",
-                    conversation_id, time.monotonic() - t0,
+                    "pipeline.follow_up elapsed=%.1fs",
+                    time.monotonic() - t0,
                 )
                 self._outcomes["follow_up"] += 1
                 yield ("result", _empty_result(
@@ -169,7 +171,7 @@ class AgentPipeline:
                 ))
                 return
 
-        # --- Step 2: clinical tools + evidence retrieval in parallel ---
+
         yield ("step", {"step": "tools", "message": "Checking clinical calculators…"})
         tool_results, evidence_result = await asyncio.gather(
             self._run_tools(conv_text), self._retrieve_evidence(conversation, conversation_id)
@@ -184,7 +186,7 @@ class AgentPipeline:
             ))
             return
 
-        # --- Step 3: streamed answer generation ---
+
         yield ("step", {"step": "generating", "message": "Writing your evidence-based answer…"})
         question = conv_text
         answer_user = self._build_answer_user(question, tool_results, evidence_result)
@@ -193,20 +195,24 @@ class AgentPipeline:
         try:
             async for chunk in self.llm.generate_stream(answer_user, system=ANSWER_SYSTEM):
                 answer_parts.append(chunk)
+                if sum(map(len, answer_parts)) > self.max_answer_chars:
+                    raise ReviewUnavailable("Answer exceeded its budget")
 
         except Exception as exc:
             raise ReviewUnavailable("Answer generation was interrupted. Please try again.") from exc
         answer = "".join(answer_parts)
+        if not answer.strip():
+            raise ReviewUnavailable("The answer was empty")
 
-        # --- Step 4: safety review ---
+
         yield ("step", {"step": "safety", "message": "Verifying answer safety…"})
-        answer = await self._safety_check(question, answer, evidence_result)
-        anatomy_context = await self._detect_anatomy(conv_text)
+        answer = await self._safety_check(question, answer, evidence_result, tool_results)
+        self._validate_answer(answer, len(evidence_result["articles"]))
+        anatomy_context = select_anatomy(triage.get("anatomy"))
         yield ("answer_chunk", {"text": answer})
 
         logger.info(
-            "pipeline.answer conversation_id=%s tools=%d articles=%d answer_chars=%d elapsed=%.1fs",
-            conversation_id,
+            "pipeline.answer tools=%d articles=%d answer_chars=%d elapsed=%.1fs",
             len(tool_results),
             len(evidence_result.get("articles", [])),
             len(answer),
@@ -215,6 +221,7 @@ class AgentPipeline:
         self._outcomes["answer"] += 1
         yield ("result", _empty_result(
             type="answer",
+            evidence_status="available",
             answer=answer,
             articles=evidence_result.get("articles", []),
             tool_results=tool_results,
@@ -222,12 +229,12 @@ class AgentPipeline:
             anatomy_context=anatomy_context,
         ))
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
+
+
+
 
     def outcome_stats(self) -> dict[str, int]:
-        """Count completed paths without retaining conversation content."""
+
         return {
             key: self._outcomes[key]
             for key in ("conversation", "follow_up", "answer", "emergency", "evidence_unavailable")
@@ -243,7 +250,7 @@ class AgentPipeline:
 
     @staticmethod
     def _count_prior_clarifications(conversation: list[str]) -> int:
-        """Count only clarification forms emitted by this pipeline."""
+
         count = 0
         for i in range(1, len(conversation), 2):
             msg = conversation[i]
@@ -254,12 +261,12 @@ class AgentPipeline:
     _NONE_SENTINEL = object()
 
     async def _cached_step(self, step: str, conv_text: str, compute):
-        """Memoize a deterministic classification step by conversation hash.
 
-        ``None`` results (e.g. "no anatomy detected") are cached too, via a
-        sentinel, so negative outcomes also skip repeat LLM calls.
-        """
-        key = text_key("v3", cache_scope.get(), getattr(self.llm, "model", "test"), step, conv_text)
+
+
+
+
+        key = text_key(self.policy_version, cache_scope.get(), getattr(self.llm, "model", "test"), step, conv_text)
         async def wrapped():
             value = await compute()
             return self._NONE_SENTINEL if value is None else value
@@ -267,7 +274,7 @@ class AgentPipeline:
         return None if cached is self._NONE_SENTINEL else cached
 
     async def _retrieve_evidence(self, conversation: list[str], conversation_id: str) -> dict:
-        key = text_key("evidence-v3", cache_scope.get(), conversation_id, *conversation)
+        key = text_key("evidence-v4", cache_scope.get(), conversation_id, *conversation)
         async def compute():
             if inspect.iscoroutinefunction(self.evidence.search):
                 return await self.evidence.search(conversation, conversation_id)
@@ -279,7 +286,8 @@ class AgentPipeline:
     async def _triage(self, conv_text: str) -> dict:
         async def compute():
             raw = await self.llm.generate(
-                TRIAGE_USER.format(conversation=conv_text), system=TRIAGE_SYSTEM
+                TRIAGE_USER.format(conversation=conv_text), system=TRIAGE_SYSTEM,
+                max_tokens=800, json_mode=True
             )
             triage = parse_json_response(raw)
             if triage.get("action") not in {"ask", "answer", "emergency", "conversation"}:
@@ -302,47 +310,28 @@ class AgentPipeline:
         except Exception:
             raise ReviewUnavailable("Unable to assess this question safely. Please try again.") from None
 
-    async def _detect_anatomy(self, conv_text: str) -> dict | None:
-        async def compute():
-            return await detect_anatomy_context(conv_text, self.llm)
-
-        try:
-            return await self._cached_step("anatomy", conv_text, compute)
-        except Exception:
-            logger.exception("pipeline.anatomy failed, continuing without it")
-            return None
-
-    async def _emergency_guidance(self, conv_text: str) -> str:
-        try:
-            return await self.llm.generate(
-                EMERGENCY_GUIDANCE_USER.format(conversation=conv_text),
-                system=EMERGENCY_GUIDANCE_SYSTEM,
-            )
-        except Exception:
-            logger.exception("pipeline.emergency_guidance failed")
-            return ""
-
     async def _run_tools(self, conv_text: str) -> list[dict]:
         async def compute():
             raw = await self.llm.generate(
                 TOOL_SELECTION_USER.format(conversation=conv_text),
-                system=self.tool_selection_system,
+                system=self.tool_selection_system, max_tokens=256, json_mode=True,
             )
             selection = parse_json_response(raw)
-            logger.info("pipeline.tools selected=%s", selection.get("selected_tools"))
+            if not isinstance(selection.get("selected_tools"), list):
+                raise ValueError("Invalid tool selection")
             return selection
 
         try:
             selection = await self._cached_step("tool_selection", conv_text, compute)
         except Exception:
-            logger.exception("pipeline.tool_selection failed")
+            logger.warning("pipeline.tool_selection failed")
             return []
 
         selected = list(dict.fromkeys(k for k in selection.get("selected_tools", []) if isinstance(k, str) and k in TOOL_REGISTRY))[:2]
         if not selected:
             return []
 
-        # Extract variables for all selected tools concurrently.
+
         extractions = await asyncio.gather(
             *(
                 self._extract_variables(conv_text, key, TOOL_REGISTRY[key]["variables"])
@@ -358,25 +347,26 @@ class AgentPipeline:
                 result = TOOL_REGISTRY[tool_key]["function"](variables)
                 results.append(result)
             except Exception:
-                logger.exception("pipeline.tool_execution failed tool=%s", tool_key)
+                logger.warning("pipeline.tool_execution failed tool=%s", tool_key)
         return results
 
     async def _extract_variables(
         self, conv_text: str, tool_name: str, variables: list[str]
     ) -> dict | None:
-        # System message is deterministic per tool (static registry data), so
-        # each tool's extraction prompt stays prefix-cacheable.
+
+
         system = VARIABLE_EXTRACTION_SYSTEM.format(
             tool_name=tool_name, variables=", ".join(variables)
         )
         try:
             raw = await self.llm.generate(
-                VARIABLE_EXTRACTION_USER.format(conversation=conv_text), system=system
+                VARIABLE_EXTRACTION_USER.format(conversation=conv_text), system=system,
+                max_tokens=600, json_mode=True
             )
             parsed = parse_json_response(raw)
             return {k: v for k, v in parsed.items() if v is not None}
         except Exception:
-            logger.exception("pipeline.variable_extraction failed tool=%s", tool_name)
+            logger.warning("pipeline.variable_extraction failed tool=%s", tool_name)
             return None
 
     def _build_answer_user(
@@ -393,7 +383,7 @@ class AgentPipeline:
         else:
             tool_results_section = ""
 
-        # Token budget: cap article count and TL;DR length.
+
         articles = evidence.get("articles", [])[: self.max_evidence_articles]
         if articles:
             evidence_lines = []
@@ -420,24 +410,41 @@ class AgentPipeline:
             evidence_text=evidence_text,
         )
 
-    async def _safety_check(self, question: str, answer: str, evidence: dict) -> str:
+    async def _safety_check(self, question: str, answer: str, evidence: dict, tool_results=None) -> str:
         articles = evidence.get("articles", [])[: self.max_evidence_articles]
         citation_lines = [
             f"[{i}] {art.get('title', '')} ({art.get('year', '')}) {art.get('tldr', '')[:self.max_tldr_chars]}"
             for i, art in enumerate(articles, 1)
         ]
         citations_text = "\n".join(citation_lines) or "No citations available."
-        user = SAFETY_USER.format(
-            question=question, answer=answer, citations=citations_text
-        )
-        try:
-            raw = await self.llm.generate(user, system=SAFETY_SYSTEM)
-            result = parse_json_response(raw)
-            if result.get("is_safe") is True:
-                return answer
-            revised = result.get("revised_answer")
-            if result.get("is_safe") is False and isinstance(revised, str) and revised.strip():
-                return revised
-        except Exception:
-            logger.warning("pipeline.safety unavailable")
+        if tool_results:
+            import json
+            citations_text += "\nValidated calculator outputs:\n" + json.dumps(tool_results, ensure_ascii=False)
+        candidate = answer
+        for attempt in range(2):
+            user = SAFETY_USER.format(question=question, answer=candidate, citations=citations_text)
+            try:
+                raw = await self.llm.generate(user, system=SAFETY_SYSTEM, max_tokens=4096, json_mode=True)
+                result = parse_json_response(raw)
+                if result.get("is_safe") is True and not result.get("issues"):
+                    return candidate
+                revised = result.get("revised_answer")
+                if attempt == 0 and result.get("is_safe") is False and isinstance(revised, str) and revised.strip():
+                    self._validate_answer(revised, len(articles))
+                    candidate = revised
+                    continue
+            except Exception:
+                logger.warning("pipeline.safety unavailable")
+            break
         raise ReviewUnavailable("I couldn’t complete the answer review. Please try again.")
+
+    def _validate_answer(self, answer: str, source_count: int):
+        if not answer.strip() or len(answer) > self.max_answer_chars:
+            raise ReviewUnavailable("Invalid reviewed answer")
+        markers = re.findall(r"[\[【〔](\d+(?:\s*[,，]\s*\d+)*)[\]】〕]", answer)
+        references = [int(n.strip()) for marker in markers for n in re.split("[,，]", marker)]
+        if not references or any(n < 1 or n > source_count for n in references):
+            raise ReviewUnavailable("The reviewed answer has invalid citations")
+
+    async def aclose(self):
+        await asyncio.gather(self.step_cache.aclose(), self.evidence_cache.aclose())

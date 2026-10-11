@@ -1,19 +1,3 @@
-"""In-process TTL + LRU cache for pipeline results.
-
-Two layers of caching keep tokens and latency down without external
-infrastructure:
-
-- **Evidence cache** — MediSearch lookups keyed by the normalized full
-  conversation. Retrieval is the slowest pipeline step and the home-page
-  example prompts make repeated identical questions common.
-- **Step cache** — deterministic JSON classification steps (triage, tool
-  selection, anatomy detection) keyed by the full conversation text, so a
-  refresh + resubmit costs zero LLM calls for those steps.
-
-No PHI is stored beyond hashed keys plus the cached values themselves, which
-live only in process memory with a short TTL.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -25,69 +9,79 @@ from typing import Any
 
 
 def text_key(*parts: str) -> str:
-    """Stable SHA-256 key from normalized text parts (PHI-free log-safe)."""
     return hashlib.sha256(json.dumps(parts, ensure_ascii=False).encode()).hexdigest()
 
 
 class TTLCache:
-    """Tiny TTL+LRU cache (monotonic clock, no external deps).
-
-    Safe under asyncio's cooperative scheduling: operations do not await, so
-    each get/put is atomic with respect to the event loop.
-    """
-
     def __init__(self, max_entries: int = 256, ttl_seconds: float = 600.0):
+        if max_entries < 0 or ttl_seconds < 0:
+            raise ValueError("Cache limits cannot be negative")
         self.max_entries = max_entries
         self.ttl_seconds = ttl_seconds
         self._data: OrderedDict[str, tuple[float, Any]] = OrderedDict()
+        self._pending: dict[str, asyncio.Task] = {}
+        self._waiters: dict[str, int] = {}
         self.hits = 0
         self.misses = 0
-        self._pending: dict[str, asyncio.Task] = {}
 
     async def get_or_compute(self, key, compute, cache_if=lambda value: True):
         cached = self.get(key)
         if cached is not None:
             return cached
-        if key not in self._pending:
+        task = self._pending.get(key)
+        if task is None:
             async def fill():
-                try:
-                    value = await compute()
-                    if cache_if(value):
-                        self.put(key, value)
-                    return value
-                finally:
-                    self._pending.pop(key, None)
+                value = await compute()
+                if cache_if(value):
+                    self.put(key, value)
+                return value
+
             task = asyncio.create_task(fill())
-            task.add_done_callback(lambda done: done.exception() if not done.cancelled() else None)
             self._pending[key] = task
-        return await asyncio.shield(self._pending[key])
+        self._waiters[key] = self._waiters.get(key, 0) + 1
+        try:
+            return await asyncio.shield(task)
+        finally:
+            self._waiters[key] -= 1
+            if self._waiters[key] == 0:
+                self._waiters.pop(key)
+                self._pending.pop(key, None)
+                if not task.done():
+                    task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
+    def _expire(self):
+        now = time.monotonic()
+        for key in [key for key, (expires, _) in self._data.items() if expires <= now]:
+            self._data.pop(key, None)
 
     def get(self, key: str) -> Any | None:
         entry = self._data.get(key)
-        if entry is None:
-            self.misses += 1
-            return None
-        expires_at, value = entry
-        if time.monotonic() >= expires_at:
-            del self._data[key]
+        if entry is None or entry[0] <= time.monotonic():
+            self._data.pop(key, None)
             self.misses += 1
             return None
         self._data.move_to_end(key)
         self.hits += 1
-        return value
+        return entry[1]
 
     def put(self, key: str, value: Any) -> None:
-        if key in self._data:
-            self._data.move_to_end(key)
+        if not self.max_entries or not self.ttl_seconds:
+            return
+        self._expire()
         self._data[key] = (time.monotonic() + self.ttl_seconds, value)
+        self._data.move_to_end(key)
         while len(self._data) > self.max_entries:
             self._data.popitem(last=False)
 
+    async def aclose(self):
+        tasks = list(self._pending.values())
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        self._data.clear()
+
     def stats(self) -> dict:
-        return {
-            "size": len(self._data),
-            "max_entries": self.max_entries,
-            "ttl_seconds": self.ttl_seconds,
-            "hits": self.hits,
-            "misses": self.misses,
-        }
+        self._expire()
+        return {"size": len(self._data), "max_entries": self.max_entries,
+                "ttl_seconds": self.ttl_seconds, "hits": self.hits, "misses": self.misses}

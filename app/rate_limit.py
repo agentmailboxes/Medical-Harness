@@ -1,9 +1,3 @@
-"""Minimal in-memory sliding-window rate limiter (per client IP).
-
-Suitable for a single-instance deployment; swap for a shared store
-(e.g. Redis) when scaling horizontally.
-"""
-
 from __future__ import annotations
 
 import time
@@ -30,6 +24,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if request.method == "POST" and request.url.path.startswith(_RATE_LIMITED_PATHS):
             key = self._client_key(request)
             now = time.monotonic()
+            if len(self._hits) >= 10000 and key not in self._hits:
+                cutoff = now - self.window_seconds
+                for stale in [k for k, v in self._hits.items() if not v or v[-1] <= cutoff]:
+                    del self._hits[stale]
+                if len(self._hits) >= 10000:
+                    return JSONResponse({"detail": "The service is busy. Please try again shortly."}, status_code=429, headers={"Retry-After": str(self.window_seconds)})
             hits = self._hits[key]
             cutoff = now - self.window_seconds
             while hits and hits[0] < cutoff:
@@ -43,9 +43,4 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     headers={"Retry-After": str(self.window_seconds)},
                 )
             hits.append(now)
-            # Opportunistic cleanup of idle clients.
-            if len(self._hits) > 10_000:
-                stale = [k for k, v in self._hits.items() if not v or v[-1] < cutoff]
-                for k in stale:
-                    del self._hits[k]
         return await call_next(request)

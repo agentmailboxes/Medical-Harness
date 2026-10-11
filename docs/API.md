@@ -21,7 +21,7 @@ Both chat endpoints accept JSON with `conversation` and an optional `conversatio
 }
 ```
 
-`conversation` is a nonempty list of strings: user, assistant, user, and so on. It must end with the user's message. The server limits the conversation to 40 messages and each message to 8,000 characters by default. Reuse the returned `conversation_id` for follow-up requests.
+`conversation` is a nonempty list of strings: user, assistant, user, and so on. It must end with the user's message. The server limits the conversation to 39 messages and each message to 8,000 characters by default. Reuse the returned `conversation_id` for follow-up requests.
 
 `POST /api/chat` waits for a JSON response. For example:
 
@@ -60,3 +60,17 @@ The server may send SSE comment keep-alives while work is pending. Consumers sho
 ## Limits and errors
 
 Validation errors use normal FastAPI HTTP statuses. The app may return 429 for the per-instance chat rate limit or 503 when busy, timed out, or unable to complete a safe answer. Do not present a 503 as a medical answer. See [configuration](CONFIGURATION.md) for limit settings.
+
+## Anatomy and calculators
+
+`anatomy_context` is `null` unless triage determines a spatial explanation is useful. Otherwise it is a validated object such as:
+
+```json
+{"scene_id":"knee","label":"Knee","reason":"See the bones around the knee."}
+```
+
+Supported scene IDs are `head`, `neck`, `shoulder`, `chest`, `abdomen`, `pelvis`, `spine`, `elbow`, `hand`, `knee`, `lower_leg`, and `foot`. This replaces the old `has_anatomy`/region-array contract. Emergency, routine conversation and evidence failure paths suppress anatomy. The browser downloads the model only after the user opens it.
+
+Calculator results include `tool`, `source`, `scope`, and a numeric score or value with units where applicable. Invalid supplied inputs yield an `error`; missing inputs never become assumed normal values. The approximate Framingham calculator has been removed. The new tools are adult CKD-EPI 2021 eGFR, estimated average glucose from HbA1c, and explicit measurement conversion.
+
+The default aggregate conversation limit is 32,000 characters and request body limit is 262,144 bytes. A request above either limit returns 413. The `result` event is authoritative. Incomplete provider streams, failed re-review, or missing/out-of-range citation indices produce an error instead of an answer. An unsafe draft can be revised once and must pass a separate second review. Protected metrics include the LLM `circuit_open` flag.
