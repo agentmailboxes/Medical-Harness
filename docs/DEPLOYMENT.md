@@ -8,17 +8,17 @@ Vercel recognizes `app.main:app` through `pyproject.toml`. `vercel.json` gives t
 
 1. In Vercel, create a project from this GitHub repository. Leave the root directory at the repository root and use the detected FastAPI settings.
 2. Add both provider keys under **Project Settings → Environment Variables** for Production. Add Preview only if preview deployments should call the providers.
-3. In the project's **Analytics** section, enable Web Analytics. The static HTML loads Vercel's `/_vercel/insights/script.js` endpoint for page views; it does not send custom events or chat messages.
-4. Deploy. Open `/api/health`, the home page, and `/docs`. Test a harmless question to confirm both providers can be reached.
+3. Keep the committed `static/dist/`, `static/build.json`, and regional atlas files. These are built locally/CI; production does not run npm. Scratch artifacts, tests, evaluations, and `.env` are excluded from uploads.
+4. Deploy a preview. Check `/api/health`, the home page, `/docs`, and a synthetic question. Confirm no 3D assets download until opening a relevant scene.
 
 You can also deploy a linked local checkout with:
 
 ```bash
-vercel link
-vercel deploy --prod
+vercel link --project medical-harness
+vercel deploy --target preview
 ```
 
-The current production project was initially deployed by CLI. At the time this guide was written, the Vercel account lacked a GitHub login connection, so **pushing to GitHub alone did not trigger Vercel**. If that remains true, run the CLI deployment after pushing. To enable automatic builds, connect GitHub in Vercel account settings and link the repository to the project.
+The refactor links a project named `medical-harness` and connects the GitHub repository. Preview and Production provider variables are configured as sensitive values. Verify Git integration and the production branch in Vercel settings before relying on automatic deployments. Merge the reviewed PR when ready; use `vercel deploy --prod` only for an intentional production deployment. A preview may require the owner's Vercel session because of deployment protection.
 
 Vercel Functions scale independently. In-memory caches, concurrency slots, and rate limits are per instance. Use external shared infrastructure if you need global quotas or durable state. The application has no user authentication or database.
 
@@ -33,7 +33,7 @@ docker run --env-file .env -p 8080:8080 medical-harness
 
 ## DigitalOcean App Platform
 
-The example `deploy/app-spec.yaml` uses a container image in DigitalOcean Container Registry. Build and push an `medical-harness` image to your registry, update the repository/tag fields in the spec, and provide the two required environment values as secrets in the DigitalOcean console. Review instance size, region, and health check before creating an app. Do not commit filled secret values to the spec.
+The example `deploy/app-spec.yaml` uses a container image in DigitalOcean Container Registry. Build and push a `medical-harness` image to your registry, update the repository/tag fields, and provide provider values as secrets in the console. The Docker and DigitalOcean paths are documented but were not deployed during this refactor.
 
 ## Before sharing a public URL
 

@@ -1,6 +1,3 @@
-# DigitalOcean App Platform spec for medical-harness.
-# Deploy: doctl apps create --spec deploy/app-spec.yaml
-# Secrets are provided as encrypted env vars at deploy time — never commit values.
 name: medical-harness
 region: blr
 services:

@@ -1,32 +1,35 @@
-# Reliability harness
+# Tools and reliability
 
-medical-harness is an educational health assistant. Its control flow treats medical emergencies, ordinary conversation, and evidence-backed medical questions as different tasks. This document records the expected behavior and the next tool choices.
+Emergency triage precedes all tools. The planner selects at most two relevant tools. Missing facts are not normal findings. Medical answers require sources and completed review. These safeguards do not establish clinical accuracy.
 
-## Why the routes are separate
+| Tool | Input and result | Boundary |
+| --- | --- | --- |
+| MediSearch | Conversation → sources and excerpts | Missing evidence is explicit |
+| DailyMed labels | Named medicine → up to three US label links/dates | Directory only, no interaction or dosing claim |
+| PubMed lookup | Topic → up to three indexed abstracts via Europe PMC | Explicit research requests, not systematic review |
+| Adult BMI | Age, height, weight → BMI and CDC category | Age 20+, not pediatric/pregnancy classification |
+| CKD-EPI 2021 eGFR | Adult age, equation sex, creatinine → eGFR | Stable creatinine; not AKI, pregnancy, CKD diagnosis or dosing |
+| Estimated average glucose | HbA1c percent → estimated mg/dL and mmol/L | Not current glucose or insulin dosing |
+| Measurement conversion | Value and conversion → value/units | Weight, height, temperature, glucose, creatinine; no drug doses |
+| Two-level Wells DVT | All criteria explicitly supplied → score and likelihood | Requires examination; cannot rule out a clot |
+| CHA2DS2-VASc | Confirmed AF and supplied factors → score | No treatment recommendation |
+| MRC muscle strength | Examined integer grade → description | No grade inferred from symptoms |
+| Anatomy | Spatially useful question → reference scene | No patient findings, diagnosis or inferred laterality |
 
-The [World Health Organization](https://www.who.int/news/item/18-01-2024-who-releases-ai-ethics-and-governance-guidance-for-large-multi-modal-models) recommends well-defined health AI tasks with measured accuracy and reliability. [AHRQ's review of symptom-checker research](https://www.ahrq.gov/diagnostic-safety/research/stroke-support.html) shows that triage mistakes can be unsafe. [Agent-building guidance](https://openai.com/business/guides-and-resources/a-practical-guide-to-building-ai-agents/) recommends guardrails tied to observed failures and repeatable evaluations. These sources motivate a narrow route for messages such as “hi,” while preserving emergency triage and the reviewed medical answer path.
+Calculator results include source and scope. Tests cover nonnumeric, nonfinite, out-of-range, contradictory age-band and missing inputs. Approximate Framingham scoring is removed.
 
-1. Classify the latest turn in conversation context. Emergency takes priority.
-2. Return a fixed, nonclinical response to a greeting, courtesy message, capabilities question, unclear message, or unrelated request. Exact first-turn routine phrases also recover from an unnecessary medical clarification. These responses do not retrieve evidence, select calculators, or claim citations.
-3. For a medical request, ask for details only when they materially change advice. Otherwise retrieve sources and calculate applicable scores from supplied inputs. If sources are unavailable, state that limitation.
-4. Review the complete medical answer before the browser receives it. Record only numeric outcome counts in protected, per-instance metrics.
+## Failure behavior
 
-## Regression cases
-
-| Input | Required path |
+| Condition | Response |
 | --- | --- |
-| `hi`, `hii`, `morning` | Short greeting, no symptom form or medical retrieval |
-| `thanks`, `bye`, `what can you do?` | Appropriate bounded reply |
-| Unclear text or a clearly unrelated request | Ask for a health concern or explain the app's scope |
-| `Hi, I have crushing chest pain and I'm sweating` | Emergency triage, never greeting |
-| A short answer such as `morning` to an earlier medical follow-up | Continue the medical conversation |
-| Clear health question | Evidence-backed answer and completed safety review |
-| Evidence or review failure | Explicit limitation or safe error; no invented sources or unreviewed answer |
+| Emergency | Fixed urgent guidance, no normal tools |
+| Greeting/unrelated request | Fixed nonclinical response after triage |
+| Essential facts missing | Up to three questions, one round maximum |
+| No medical evidence | Explicit limitation, no generated answer |
+| Partial stream, review failure or invalid citations | Discard draft, return error |
+| Reference endpoint fails | Explicit unavailable result, not a clinical negative |
+| Graphics/download failure | Keep searchable structures and text input |
 
-Automated tests use scripted provider responses to check these paths without live keys or patient data. They do not establish clinical accuracy. Before expanding clinical scope, add clinician-reviewed cases for red flags, ambiguous symptoms, medication questions, missing data, mixed-language inputs, and possible under-triage. Review false negatives as well as false positives.
+Network work has deadlines, byte limits, pooled clients and circuit breakers. Session-scoped caches coalesce work and cancellation releases pending tasks. Limits remain per instance; see [configuration](CONFIGURATION.md).
 
-## Tool review
-
-The current tools are MediSearch retrieval, anatomy selection, and deterministic calculators. The next useful addition is a **patient education source**, especially for broad questions whose best explanation is not a single paper. The [National Library of Medicine's MedlinePlus Web Service](https://medlineplus.gov/about/developers/webservices/) supports ranked health-topic searches with summaries and source links. It requires attribution, limits clients to 85 requests per minute per IP address, and recommends caching. Any integration should send a short topic query rather than a full patient conversation, keep its source type distinct from research articles, and fail explicitly if it cannot retrieve material.
-
-For medication names, [RxNorm's API](https://lhncbc.nlm.nih.gov/RxNav/APIs/RxNormAPIs.html) could normalize a name before retrieval. A normalized name is not a verified interaction or dosing recommendation. Medication safety advice needs its own source, validation, and evaluation cases. Additional scoring calculators should follow the same standard: validated scope, required inputs, unit checks, source attribution, and refusal to score when data are missing.
+Future tools should address observed gaps. Jurisdiction-appropriate patient education and medication-name normalization are reasonable candidates. A verified interaction service needs authoritative data and clinical evaluation. Clinician-reviewed cases are more useful than adding unvalidated risk scores.
