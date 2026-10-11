@@ -1,12 +1,12 @@
-# OpenMed
+# medical-harness
 
-Ask a health question and get an evidence-grounded answer with source articles. OpenMed combines a FastAPI agent, clinical calculators, and an interactive 3D anatomy viewer in a single web application.
+Ask a health question and get an evidence-grounded answer with source articles. medical-harness combines a FastAPI agent, clinical calculators, and an interactive 3D anatomy viewer in a single web application.
 
 **[Try the live app](https://medisearch-agent.vercel.app/)** · [How it works](docs/ARCHITECTURE.md) · [Reliability harness](docs/RELIABILITY.md) · [Contributing](CONTRIBUTING.md)
 
-> OpenMed provides educational information, not a diagnosis or a substitute for a clinician. For emergencies, contact local emergency services.
+> medical-harness provides educational information, not a diagnosis or a substitute for a clinician. For emergencies, contact local emergency services.
 
-![OpenMed home screen in light theme](docs/media/desktop-light.png)
+![medical-harness home screen in light theme](docs/media/desktop-light.png)
 
 [More screenshots and a short screen recording](docs/VISUALS.md)
 
@@ -41,7 +41,7 @@ Copy-Item .env.example .env
 Set `CEREBRAS_API_KEY` and `MEDISEARCH_API_KEY` in `.env`, then start the app:
 
 ```bash
-uv run medisearch-agent
+uv run medical-harness
 ```
 
 Open <http://localhost:8080>. Check <http://localhost:8080/api/health> if the page does not load. The interactive API reference is at <http://localhost:8080/docs>.
@@ -51,8 +51,8 @@ The `.env` file is ignored by Git. Do not commit keys or put them in screenshots
 ### Docker
 
 ```bash
-docker build -t openmed .
-docker run --env-file .env -p 8080:8080 openmed
+docker build -t medical-harness .
+docker run --env-file .env -p 8080:8080 medical-harness
 ```
 
 ## Repository map

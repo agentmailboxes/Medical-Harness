@@ -1,4 +1,4 @@
-# Working on OpenMed
+# Working on medical-harness
 
 This file is the short starting point for coding agents. Follow the user's current request first; use these notes to find the right files and preserve the application's safety behavior.
 

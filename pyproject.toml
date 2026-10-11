@@ -1,5 +1,5 @@
 [project]
-name = "medisearch-agent"
+name = "medical-harness"
 version = "2.0.0"
 description = "Evidence-based Medical QA Agent with clinical tools, MediSearch retrieval, and Cerebras LLM"
 requires-python = ">=3.10"
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-medisearch-agent = "app.main:run"
+medical-harness = "app.main:run"
 
 [tool.vercel]
 entrypoint = "app.main:app"

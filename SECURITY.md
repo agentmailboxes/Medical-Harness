@@ -1,6 +1,6 @@
 # Security
 
-OpenMed handles health questions. Avoid entering identifiable patient information in public demos, issues, screenshots, or test fixtures. This project is educational software and has not been certified as a medical device or healthcare record system.
+medical-harness handles health questions. Avoid entering identifiable patient information in public demos, issues, screenshots, or test fixtures. This project is educational software and has not been certified as a medical device or healthcare record system.
 
 ## Report a vulnerability
 

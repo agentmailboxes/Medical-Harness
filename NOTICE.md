@@ -1,6 +1,6 @@
 # Third-party assets and services
 
-The [MIT license](LICENSE) covers OpenMed application code and documentation. It does not replace the licenses of third-party data, models, fonts, or hosted APIs.
+The [MIT license](LICENSE) covers medical-harness application code and documentation. It does not replace the licenses of third-party data, models, fonts, or hosted APIs.
 
 ## BodyParts3D anatomy data
 
@@ -12,6 +12,6 @@ An unused sample model previously stored in `static/models/` was removed because
 
 ## External services
 
-OpenMed calls Cerebras and MediSearch using your own API keys. Their services, returned content, and usage terms are independent of this repository's MIT license.
+medical-harness calls Cerebras and MediSearch using your own API keys. Their services, returned content, and usage terms are independent of this repository's MIT license.
 
 The optional [HealthBench dataset](https://huggingface.co/datasets/openai/healthbench) is distributed by OpenAI under its own MIT license. It is not bundled in this repository; the evaluation guide explains how to obtain it if needed.

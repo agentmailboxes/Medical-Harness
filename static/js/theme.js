@@ -3,7 +3,7 @@
  * Persisted in localStorage; falls back to prefers-color-scheme when unset.
  */
 
-const STORAGE_KEY = 'msa-theme';
+const STORAGE_KEY = 'medical-harness-theme';
 
 export function getStoredTheme() {
   try { return localStorage.getItem(STORAGE_KEY); } catch { return null; }

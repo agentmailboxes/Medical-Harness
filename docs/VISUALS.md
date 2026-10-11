@@ -1,18 +1,18 @@
 # Screenshots and recording
 
-These captures show the public OpenMed interface with no private health data or API keys. The recording demonstrates theme switching and question entry; it does not show an answer.
+These captures show the public medical-harness interface with no private health data or API keys. The recording demonstrates theme switching and question entry; it does not show an answer.
 
 ## Desktop
 
 | Light | Dark |
 | --- | --- |
-| ![OpenMed desktop light theme](media/desktop-light.png) | ![OpenMed desktop dark theme](media/desktop-dark.png) |
+| ![medical-harness desktop light theme](media/desktop-light.png) | ![medical-harness desktop dark theme](media/desktop-dark.png) |
 
 ## Mobile
 
 | Light | Dark |
 | --- | --- |
-| ![OpenMed mobile light theme](media/mobile-light.png) | ![OpenMed mobile dark theme](media/mobile-dark.png) |
+| ![medical-harness mobile light theme](media/mobile-light.png) | ![medical-harness mobile dark theme](media/mobile-dark.png) |
 
 ## Screen recording
 

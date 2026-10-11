@@ -55,7 +55,7 @@ def create_app() -> FastAPI:
         await llm.aclose()
         await evidence.aclose()
 
-    app = FastAPI(title="OpenMed", version=__version__, lifespan=lifespan)
+    app = FastAPI(title="medical-harness", version=__version__, lifespan=lifespan)
 
     app.add_middleware(GZipMiddleware, minimum_size=1024)
     app.add_middleware(
@@ -72,7 +72,7 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def response_security(request: Request, call_next):
-        session = request.cookies.get("medisearch_session", "")
+        session = request.cookies.get("medical_harness_session", "")
         valid_session = len(session) == 64 and all(c in "0123456789abcdef" for c in session)
         request.state.cache_scope = session if valid_session else secrets.token_hex(32)
         response = await call_next(request)
@@ -83,7 +83,7 @@ def create_app() -> FastAPI:
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
         if not valid_session:
-            response.set_cookie("medisearch_session", request.state.cache_scope, httponly=True,
+            response.set_cookie("medical_harness_session", request.state.cache_scope, httponly=True,
                                 secure=request.url.scheme == "https", samesite="strict")
         return response
 
@@ -109,7 +109,7 @@ app = create_app()
 
 
 def run() -> None:
-    """Entry point for `uv run medisearch-agent`."""
+    """Entry point for `uv run medical-harness`."""
     import uvicorn
 
     settings = get_settings()

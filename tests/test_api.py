@@ -169,7 +169,7 @@ def test_health_response_does_not_allow_storage(client):
     response = client.get("/api/health")
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["x-content-type-options"] == "nosniff"
-    assert "medisearch_session" in client.cookies
+    assert "medical_harness_session" in client.cookies
 
 
 def test_spoofed_forwarded_header_does_not_reset_rate_limit(client, monkeypatch):

@@ -1,6 +1,6 @@
 # Architecture
 
-OpenMed serves one browser application and one FastAPI backend. The frontend is plain HTML, CSS, and JavaScript; the anatomy viewer loads three.js from a CDN. There is no Node build step or persistent database.
+medical-harness serves one browser application and one FastAPI backend. The frontend is plain HTML, CSS, and JavaScript; the anatomy viewer loads three.js from a CDN. There is no Node build step or persistent database.
 
 ```mermaid
 flowchart LR
@@ -44,7 +44,7 @@ flowchart LR
 
 Triage precedes normal answering. Exact first-turn greetings and other routine messages can override an unnecessary medical clarification after emergency triage. Evidence is required for a sourced medical answer; retrieval failure produces an explicit limitation. Conversational replies make no medical claims and do not require retrieval. The answer review can accept or revise a medical answer, and a failed review stops the answer path. The UI and API show emergency guidance separately from normal answers. These are application safeguards, not proof of clinical validity.
 
-The caches and rate limiter live in each process. On Vercel, different Function instances do not share them. OpenMed has no user accounts, database, or durable conversation history. The browser holds the conversation during the page session and sends it with each request.
+The caches and rate limiter live in each process. On Vercel, different Function instances do not share them. medical-harness has no user accounts, database, or durable conversation history. The browser holds the conversation during the page session and sends it with each request.
 
 ## Where to make a change
 

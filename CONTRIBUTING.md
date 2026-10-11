@@ -1,6 +1,6 @@
-# Contributing to OpenMed
+# Contributing to medical-harness
 
-Thanks for helping improve OpenMed. Issues and pull requests are welcome for bugs, accessibility, documentation, reliability, and carefully scoped features.
+Thanks for helping improve medical-harness. Issues and pull requests are welcome for bugs, accessibility, documentation, reliability, and carefully scoped features.
 
 Please follow the [community code of conduct](CODE_OF_CONDUCT.md).
 

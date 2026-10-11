@@ -591,7 +591,7 @@ wheels = [
 ]
 
 [[package]]
-name = "medisearch-agent"
+name = "medical-harness"
 version = "2.0.0"
 source = { editable = "." }
 dependencies = [

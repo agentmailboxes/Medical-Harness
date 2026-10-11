@@ -1,6 +1,6 @@
 # Reliability harness
 
-OpenMed is an educational health assistant. Its control flow treats medical emergencies, ordinary conversation, and evidence-backed medical questions as different tasks. This document records the expected behavior and the next tool choices.
+medical-harness is an educational health assistant. Its control flow treats medical emergencies, ordinary conversation, and evidence-backed medical questions as different tasks. This document records the expected behavior and the next tool choices.
 
 ## Why the routes are separate
 

@@ -1,6 +1,6 @@
 # Deployment
 
-OpenMed serves the frontend and API from the same FastAPI application. Every deployment needs `CEREBRAS_API_KEY` and `MEDISEARCH_API_KEY` set on the host. Keep `.env` local; it is excluded from Git and Vercel uploads.
+medical-harness serves the frontend and API from the same FastAPI application. Every deployment needs `CEREBRAS_API_KEY` and `MEDISEARCH_API_KEY` set on the host. Keep `.env` local; it is excluded from Git and Vercel uploads.
 
 ## Vercel
 
@@ -25,15 +25,15 @@ Vercel Functions scale independently. In-memory caches, concurrency slots, and r
 ## Docker
 
 ```bash
-docker build -t openmed .
-docker run --env-file .env -p 8080:8080 openmed
+docker build -t medical-harness .
+docker run --env-file .env -p 8080:8080 medical-harness
 ```
 
 `Dockerfile` installs runtime dependencies with uv and runs Uvicorn as a non-root user. The health endpoint is `/api/health`. `docker run --env-file` passes keys at runtime; they are not baked into the image.
 
 ## DigitalOcean App Platform
 
-The example `deploy/app-spec.yaml` uses a container image in DigitalOcean Container Registry. Build and push an `openmed` image to your registry, update the repository/tag fields in the spec, and provide the two required environment values as secrets in the DigitalOcean console. Review instance size, region, and health check before creating an app. Do not commit filled secret values to the spec.
+The example `deploy/app-spec.yaml` uses a container image in DigitalOcean Container Registry. Build and push an `medical-harness` image to your registry, update the repository/tag fields in the spec, and provide the two required environment values as secrets in the DigitalOcean console. Review instance size, region, and health check before creating an app. Do not commit filled secret values to the spec.
 
 ## Before sharing a public URL
 

@@ -1,5 +1,5 @@
 /* ============================================================================
-   THEME — design tokens for MediSearch Agent
+   THEME — design tokens for medical-harness
    Light theme is default; dark theme via [data-theme="dark"] on <html>,
    or automatically through prefers-color-scheme when no preference is saved.
    ============================================================================ */
