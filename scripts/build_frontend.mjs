@@ -8,7 +8,7 @@ const result = await build({
   outdir, bundle: true, splitting: true, format: 'esm', target: 'es2022',
   entryNames: '[name]-[hash]', chunkNames: '[name]-[hash]', minify: true,
   legalComments: 'external', metafile: true,
-  loader: { '.woff2': 'file' }, assetNames: '[name]-[hash]',
+  loader: { '.woff2': 'file', '.svg': 'file' }, assetNames: '[name]-[hash]',
 });
 const manifest = {};
 for (const [path, details] of Object.entries(result.metafile.outputs)) {

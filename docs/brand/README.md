@@ -1,8 +1,8 @@
-# Monochrome logo exploration
+# Monochrome logo
 
 ![Proposed monochrome mark](monochrome-concept.png)
 
-Generated with the built-in OpenAI image generation tool on 2026-10-12 after Adobe Express returned service errors. This is a proposed raster concept, not the active application mark or an Adobe-generated asset. The existing editable book monogram is retained as requested. No stock or squirrel illustration was used. A generated concept does not establish trademark exclusivity.
+Generated with the built-in OpenAI image generation tool on 2026-10-12 after Adobe Express returned service errors, then approved by the project owner. The silhouette is adapted into the lightweight editable SVG at `static/assets/brand/m-mark.svg`, used by the header and assistant avatar, with a matching favicon. CSS masks let the avatar follow the current theme. The original raster is preserved here as the design reference; it is not downloaded by the app. No stock or squirrel illustration was used. A generated concept does not establish trademark exclusivity.
 
 Prompt:
 

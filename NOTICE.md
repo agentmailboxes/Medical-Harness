@@ -14,7 +14,7 @@ The previous full-body runtime assets and viewer are removed. The underlying lic
 
 Three.js and its Meshopt decoder are bundled locally. Their MIT notices are retained in `static/vendor-licenses/` and the generated bundle notice. Build tooling is pinned in `package-lock.json`.
 
-Selected [Lucide](https://lucide.dev/) icons use the ISC license. [Instrument Sans](https://fonts.google.com/specimen/Instrument+Sans) is self-hosted under the SIL Open Font License 1.1. Their full notices are in `static/vendor-licenses/`. The book monogram and eye-pressure schematic are original application assets. No stock logo or generated squirrel image is included. The separate monochrome logo exploration in `docs/brand/` was generated with OpenAI image generation; it is not an Adobe asset or the active application logo.
+Selected [Lucide](https://lucide.dev/) icons use the ISC license. [Instrument Sans](https://fonts.google.com/specimen/Instrument+Sans) is self-hosted under the SIL Open Font License 1.1. Their full notices are in `static/vendor-licenses/`. The eye-pressure schematic is an original application asset. The active m monogram is an SVG adaptation of the approved OpenAI-generated concept preserved in `docs/brand/`; it is not an Adobe or stock asset. No generated squirrel image is included.
 
 The educational guide paraphrases National Eye Institute material and links directly to its sources. NIH does not endorse this application. The conceptual illustration is not a clinically validated simulation.
 

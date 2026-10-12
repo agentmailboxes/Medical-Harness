@@ -68,7 +68,7 @@ function removeHero() {
 }
 
 function avatarHtml(role) {
-  return `<div class="msg-avatar ${role === 'assistant' ? 'assistant-avatar' : 'user-avatar'}">${svg(role === 'assistant' ? ICON.pulse : ICON.user)}</div>`;
+  return `<div class="msg-avatar ${role === 'assistant' ? 'assistant-avatar' : 'user-avatar'}" aria-hidden="true">${role === 'assistant' ? '<span class="brand-mark"></span>' : svg(ICON.user)}</div>`;
 }
 
 function addUserMessage(text) {

@@ -24,8 +24,9 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .brand { display: flex; align-items: center; gap: 12px; color: var(--text); text-decoration: none; font-weight: 550; font-size: 21px; letter-spacing: -.65px; }
 .brand small { display: block; font-size: 11px; font-weight: 450; letter-spacing: .15px; color: var(--muted); margin-top: 3px; }
 .brand-divider { color: var(--muted); font-weight: 400; }
-.header-logo { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 13px; background: var(--brand); color: var(--bg); }
-.header-logo svg { width: 28px; height: 28px; stroke-width: 2; }
+.brand-mark { display: block; width: 22px; height: 22px; background: currentColor; -webkit-mask: url('../assets/brand/m-mark.svg') center / contain no-repeat; mask: url('../assets/brand/m-mark.svg') center / contain no-repeat; flex-shrink: 0; }
+.header-logo { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 13px; background: #191919; color: #f8f7f4; border: 1px solid #333; }
+.header-logo .brand-mark { width: 31px; height: 31px; }
 .header-status { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 .icon-btn, .panel-close { width: 44px; height: 44px; display: grid; place-items: center; background: transparent; flex-shrink: 0; }
 .panel-close { font-size: 26px; line-height: 1; }
@@ -205,7 +206,7 @@ dialog::backdrop { background: #00000080; backdrop-filter: blur(3px); }
   .brand { font-size: 18px; gap: 9px; }
   .brand small { font-size: 9px; }
   .header-logo { width: 36px; height: 36px; border-radius: 11px; }
-  .header-logo svg { width: 25px; height: 25px; }
+  .header-logo .brand-mark { width: 27px; height: 27px; }
   .header-status { gap: 6px; }
   #chat-container { padding: 24px 20px 16px; }
   .input-area-wrapper { padding: 10px 18px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
