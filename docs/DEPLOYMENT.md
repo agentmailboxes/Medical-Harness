@@ -4,6 +4,8 @@ medical-harness serves the frontend and API from the same FastAPI application. E
 
 ## Vercel
 
+The public production application is [medical-harness.vercel.app](https://medical-harness.vercel.app). The owner authorized a production deployment from the refactor branch while PR #2 remains open for review. The home page, health endpoint, and logo assets were checked without cookies or deployment-bypass headers. Use this stable production address when sharing; unique preview URLs may require Vercel sign-in.
+
 Vercel recognizes `app.main:app` through `pyproject.toml`. `vercel.json` gives the Function 180 seconds, longer than the app's default 150-second request timeout. The Python runtime serves the UI and API together.
 
 1. In Vercel, create a project from this GitHub repository. Leave the root directory at the repository root and use the detected FastAPI settings.
