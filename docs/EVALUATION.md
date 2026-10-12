@@ -1,35 +1,55 @@
-# Evaluation
+# Evaluation and improvement loop
 
-The normal unit tests are offline and use fake keys. Run them before every change:
+Routine checks are offline and use fake keys: run `uv run pytest -q`, `npm run check:anatomy`, and `npm run test:browser`.
 
-```bash
-uv run pytest -q
-```
+The old HealthBench script was removed. It reused asynchronous clients across separate event loops, graded with the answering model, excluded failed examples from scores, and printed question excerpts. Those properties made its scores unsuitable as a promotion signal. This repository claims no clinical benchmark score.
 
-`eval_healthbench.py` is an optional manual benchmark script. It sends selected examples through the real agent pipeline and asks the configured Cerebras model to grade rubric items. It makes live Cerebras and MediSearch requests, so it can use provider quota or incur charges. It is not part of CI or local setup.
+## Synthetic live runs
 
-## Obtain the benchmark
-
-Download OpenAI's [HealthBench Hard dataset](https://huggingface.co/datasets/openai/healthbench) into `data/healthbench-hard.jsonl`. The `data/` directory is Git-ignored. OpenAI asks users not to reproduce benchmark examples in plain text or images online; keep examples out of screenshots, issues, and model training material.
-
-On macOS or Linux:
+The twenty built-in cases in evals/cases.json probe emergency routing, anatomy relevance, all eight guide IDs, visual suppression, missing inputs, reference lookup and instruction injection. These are behavior checks, not clinical validation. The visual-routing cases are prospective evaluations; passing mocked regression tests does not mean the live model has passed these cases. Explicit opt-in is required:
 
 ```bash
-mkdir -p data
-curl -L https://huggingface.co/datasets/openai/healthbench/resolve/main/hard_2025-05-08-21-00-10.jsonl -o data/healthbench-hard.jsonl
+uv run python -m evals.run run --live --out data/evals/baseline.json
+uv run python -m evals.run run --live --out data/evals/candidate.json
 ```
 
-On Windows PowerShell:
+Run the baseline on its revision, make one reviewable change, then run the candidate. Keep the case file and provider settings fixed. Each case has a fresh cache scope. Reports contain run IDs, case/budget/prompt hashes, usage, elapsed time, and check outcomes. Failures remain in the denominator. Adjacent *.responses.json files contain synthetic outputs for clinical review. The data directory is ignored by Git and deployment. Do not substitute patient records for these fixtures.
 
-```powershell
-New-Item -ItemType Directory -Force data
-Invoke-WebRequest -Uri 'https://huggingface.co/datasets/openai/healthbench/resolve/main/hard_2025-05-08-21-00-10.jsonl' -OutFile 'data/healthbench-hard.jsonl'
+Repeat runs before interpreting small improvements. Equal token budgets are not equal dollar costs across models; provider pricing and retry costs need separate review.
+
+## Independent review
+
+A qualified independent reviewer should inspect both sets of responses against a predetermined rubric: factual correctness, citation support, applicability, uncertainty, red flags and harmful omissions. Model self-grading does not meet this requirement. A local review JSON file must use exact run IDs and contain every case:
+
+```json
+{
+  "baseline": {
+    "run_id": "baseline-report-run-id",
+    "reviewer": "Reviewer identifier",
+    "ratings": {"greeting": {"score": 1.0, "safe": true}}
+  },
+  "candidate": {
+    "run_id": "candidate-report-run-id",
+    "reviewer": "Reviewer identifier",
+    "ratings": {"greeting": {"score": 1.0, "safe": true}}
+  }
+}
 ```
 
-Then run a small sample:
+This example shows one entry; include every case ID in each ratings map. Scores must be finite numbers from 0 to 1, and safe must be boolean. Store it in ignored data/evals/review.json.
 
 ```bash
-uv run python eval_healthbench.py --limit 5
+uv run python -m evals.run compare --baseline data/evals/baseline.json --candidate data/evals/candidate.json --review data/evals/review.json --out data/evals/comparison.json
 ```
 
-Use `--file PATH` for another compatible JSONL input. The script writes results to ignored `data/healthbench-results.json`. This is a research aid, not clinical validation or a performance guarantee. Do not add private patient questions, keys, or raw benchmark examples to checked-in results.
+The gate exits nonzero for missing/duplicate cases, different case or budget hashes, failed candidate checks, incomplete review, any candidate safety failure, no average clinical-score improvement, or more than 20% growth in elapsed time or reported tokens. Passing produces eligible_for_human_review. It never edits code, promotes prompts, deploys or merges. Reports are operator-supplied evidence, not cryptographically attested results.
+
+## Bounded improvement process
+
+1. Reproduce a failure with a synthetic or approved, properly deidentified case.
+2. Obtain external feedback and record one specific hypothesis.
+3. Change a prompt, tool or route on a branch and add a regression test.
+4. Rerun the same cases and budgets with independent clinical review.
+5. Compare safety, quality, source support, latency and tokens; review the PR before promotion.
+
+Useful contributions are clinician-reviewed cases/rubrics, intended countries and populations, acceptable cost/latency, and adversarial cases. Keep a held-out set that is not used to tune prompts. The small bundled pack is scaffolding, not clinical validation. [Research notes](RESEARCH.md) explain why online learning from chat history and self-approved promotion are not enabled.

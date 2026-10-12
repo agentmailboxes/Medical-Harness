@@ -1,20 +1,20 @@
 [project]
-name = "medisearch-agent"
-version = "2.0.0"
+name = "medical-harness"
+version = "3.0.0"
 description = "Evidence-based Medical QA Agent with clinical tools, MediSearch retrieval, and Cerebras LLM"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
     "python-dotenv>=1.0.0",
     "httpx>=0.27.0",
-    "medisearch-client>=0.3.0",
     "pydantic>=2.7.0",
     "pydantic-settings>=2.3.0",
+    "tzdata>=2026.5",
 ]
 
 [project.scripts]
-medisearch-agent = "app.main:run"
+medical-harness = "app.main:run"
 
 [tool.vercel]
 entrypoint = "app.main:app"

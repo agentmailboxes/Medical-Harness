@@ -1,331 +1,132 @@
-"""
-Clinical scoring tools — deterministic Python implementations of validated
-medical calculators.
+from __future__ import annotations
 
-Each tool is registered in TOOL_REGISTRY with:
-    - description: what the tool does (used by LLM for selection)
-    - variables: list of variable names needed
-    - function: callable(dict) -> dict with results
+import math
+from functools import wraps
 
-All functions handle missing data gracefully via .get() with defaults.
-"""
-
-# ---------------------------------------------------------------------------
-# 1. Wells Score for DVT
-#    Reference: Wells PS et al. Lancet 1997; validated decision rule.
-# ---------------------------------------------------------------------------
-
-def compute_wells_dvt(data: dict) -> dict:
-    """Compute the Wells score for Deep Vein Thrombosis."""
-    score = 0
-    score += 1 if data.get("active_cancer") else 0
-    score += 1 if data.get("paralysis_or_cast") else 0
-    score += 1 if data.get("bedridden_or_surgery") else 0
-    score += 1 if data.get("tenderness_along_veins") else 0
-    score += 1 if data.get("entire_leg_swollen") else 0
-    score += 1 if data.get("calf_swelling_gt_3cm") else 0
-    score += 1 if data.get("pitting_edema") else 0
-    score += 1 if data.get("collateral_superficial_veins") else 0
-    score += 1 if data.get("previous_dvt") else 0
-    score -= 2 if data.get("alternative_diagnosis_likely") else 0
-
-    if score >= 3:
-        risk = "High"
-        recommendation = "DVT is likely. Consider imaging (ultrasound) and anticoagulation pending results."
-    elif score >= 1:
-        risk = "Moderate"
-        recommendation = "Moderate probability. Consider D-dimer testing; if positive, proceed to imaging."
-    else:
-        risk = "Low"
-        recommendation = "DVT is unlikely. D-dimer test can help rule it out."
-
-    return {
-        "tool": "Wells Score (DVT)",
-        "score": score,
-        "risk": risk,
-        "recommendation": recommendation,
-    }
+TOOL_REGISTRY = {}
 
 
-# ---------------------------------------------------------------------------
-# 2. CHA2DS2-VASc Score
-#    Reference: Lip GY et al. Chest 2010; stroke risk in atrial fibrillation.
-# ---------------------------------------------------------------------------
-
-def compute_cha2ds2_vasc(data: dict) -> dict:
-    """Compute CHA2DS2-VASc score for stroke risk in atrial fibrillation."""
-    score = 0
-    score += 1 if data.get("congestive_heart_failure") else 0
-    score += 1 if data.get("hypertension") else 0
-    score += 2 if data.get("age_75_or_older") else (1 if data.get("age_65_to_74") else 0)
-    score += 1 if data.get("diabetes") else 0
-    score += 2 if data.get("stroke_or_tia_history") else 0
-    score += 1 if data.get("vascular_disease") else 0
-    score += 1 if data.get("sex_female") else 0
-
-    if score == 0:
-        risk = "Low"
-        recommendation = "Low stroke risk. Anticoagulation generally not recommended."
-    elif score == 1:
-        risk = "Low-Moderate"
-        recommendation = "Consider anticoagulation or antiplatelet therapy based on individual risk-benefit."
-    else:
-        risk = "Moderate-High"
-        recommendation = f"Score {score}: Anticoagulation (e.g. DOAC or warfarin) is generally recommended."
-
-    return {
-        "tool": "CHA2DS2-VASc Score",
-        "score": score,
-        "risk": risk,
-        "recommendation": recommendation,
-    }
+def calculator(key, name, description, inputs, source, scope):
+    def register(function):
+        @wraps(function)
+        def run(data):
+            base = {"tool": name, "source": source, "scope": scope}
+            if not isinstance(data, dict):
+                return {**base, "error": "Inputs must be an object."}
+            missing = [field for field in inputs if data.get(field) is None]
+            if missing:
+                return {**base, "error": "Required inputs were not supplied.", "missing_inputs": missing}
+            for field, rule in inputs.items():
+                value = data[field]
+                if rule == "boolean":
+                    valid = type(value) is bool or type(value) is int and value in (0, 1)
+                elif isinstance(rule, set):
+                    valid = isinstance(value, str) and value in rule
+                else:
+                    low, high = rule
+                    valid = type(value) in (int, float) and math.isfinite(value) and low <= value <= high
+                if not valid:
+                    return {**base, "error": f"Invalid or out-of-range input: {field}."}
+            try:
+                return {**base, **function(data)}
+            except ValueError as exc:
+                return {**base, "error": str(exc)}
+        TOOL_REGISTRY[key] = {"description": description, "variables": list(inputs),
+                              "source": source, "scope": scope, "function": run}
+        return run
+    return register
 
 
-# ---------------------------------------------------------------------------
-# 3. Framingham Risk Score (simplified 10-year CVD risk)
-#    Reference: Wilson PWF et al. Circulation 1998.
-#    This is a simplified point-based estimation.
-# ---------------------------------------------------------------------------
-
-def _framingham_age_points(age: int, sex: str) -> int:
-    """Age points for Framingham (simplified)."""
-    if sex == "male":
-        if age < 35:
-            return -1
-        elif age <= 39:
-            return 0
-        elif age <= 44:
-            return 1
-        elif age <= 49:
-            return 2
-        elif age <= 54:
-            return 3
-        elif age <= 59:
-            return 4
-        elif age <= 64:
-            return 5
-        elif age <= 69:
-            return 6
-        elif age <= 74:
-            return 7
-        else:
-            return 8
-    else:  # female
-        if age < 35:
-            return -9
-        elif age <= 39:
-            return -4
-        elif age <= 44:
-            return 0
-        elif age <= 49:
-            return 3
-        elif age <= 54:
-            return 6
-        elif age <= 59:
-            return 7
-        elif age <= 64:
-            return 8
-        elif age <= 69:
-            return 8
-        elif age <= 74:
-            return 8
-        else:
-            return 8
+@calculator(
+    "wells_dvt", "Wells Score (DVT)",
+    "Two-level Wells DVT score only when every criterion is explicitly supplied, including clinician examination and alternative diagnosis assessment. Never infer absent findings.",
+    {key: "boolean" for key in ("active_cancer", "paralysis_or_cast", "bedridden_or_surgery",
+     "tenderness_along_veins", "entire_leg_swollen", "calf_swelling_gt_3cm", "pitting_edema",
+     "collateral_superficial_veins", "previous_dvt", "alternative_diagnosis_likely")},
+    "https://www.nice.org.uk/guidance/ng158/chapter/recommendations", "Adult clinical assessment; cannot diagnose or rule out a clot.",
+)
+def compute_wells_dvt(data):
+    score = sum(int(data[key]) for key in TOOL_REGISTRY["wells_dvt"]["variables"] if key != "alternative_diagnosis_likely") - 2 * int(data["alternative_diagnosis_likely"])
+    return {"score": score, "risk": "DVT likely" if score >= 2 else "DVT unlikely",
+            "recommendation": "A clinician must interpret this score with examination and appropriate testing. It does not exclude DVT or replace urgent care."}
 
 
-def compute_framingham(data: dict) -> dict:
-    """Compute simplified Framingham 10-year CVD risk score."""
-    age = int(data.get("age", 50))
-    sex = str(data.get("sex", "male")).lower()
-
-    points = _framingham_age_points(age, sex)
-
-    # Total cholesterol points (simplified)
-    tc = int(data.get("total_cholesterol", 200))
-    if tc < 160:
-        points += 0
-    elif tc <= 199:
-        points += 1
-    elif tc <= 239:
-        points += 2
-    elif tc <= 279:
-        points += 3
-    else:
-        points += 4
-
-    # HDL cholesterol
-    hdl = int(data.get("hdl_cholesterol", 50))
-    if hdl >= 60:
-        points -= 2
-    elif hdl >= 50:
-        points -= 1
-    elif hdl >= 40:
-        points += 0
-    else:
-        points += 2
-
-    # Systolic blood pressure
-    sbp = int(data.get("systolic_bp", 120))
-    treated = data.get("bp_treated", False)
-    if sbp < 120:
-        points += 0
-    elif sbp <= 129:
-        points += 1 if treated else 0
-    elif sbp <= 139:
-        points += 2 if treated else 1
-    elif sbp <= 159:
-        points += 3 if treated else 2
-    else:
-        points += 4 if treated else 3
-
-    # Smoking
-    if data.get("smoker"):
-        points += 4 if sex == "male" else 7
-
-    # Diabetes
-    if data.get("diabetes"):
-        points += 3 if sex == "male" else 4
-
-    # Point-to-risk mapping (simplified, approximate)
-    risk_map_male = {
-        -3: 1, -2: 1, -1: 2, 0: 3, 1: 4, 2: 4, 3: 6, 4: 7,
-        5: 9, 6: 11, 7: 14, 8: 18, 9: 22, 10: 27, 11: 33, 12: 40,
-    }
-    risk_map_female = {
-        -2: 1, -1: 1, 0: 2, 1: 2, 2: 3, 3: 4, 4: 4, 5: 5,
-        6: 6, 7: 7, 8: 8, 9: 9, 10: 11, 11: 13, 12: 15, 13: 17,
-        14: 20, 15: 24, 16: 27,
-    }
-    risk_map = risk_map_male if sex == "male" else risk_map_female
-
-    clamped = max(min(points, max(risk_map.keys())), min(risk_map.keys()))
-    risk_percent = risk_map.get(clamped, 30)
-
-    if risk_percent < 10:
-        category = "Low"
-    elif risk_percent < 20:
-        category = "Moderate"
-    else:
-        category = "High"
-
-    return {
-        "tool": "Framingham Risk Score",
-        "points": points,
-        "ten_year_risk_percent": risk_percent,
-        "risk": category,
-        "recommendation": f"Estimated 10-year cardiovascular disease risk: {risk_percent}% ({category}).",
-    }
+@calculator(
+    "cha2ds2_vasc", "CHA2DS2-VASc Score",
+    "CHA2DS2-VASc for adults with confirmed atrial fibrillation and all explicitly supplied risk factors. Do not use for an undiagnosed irregular heartbeat or prescribe treatment.",
+    {key: "boolean" for key in ("congestive_heart_failure", "hypertension", "age_75_or_older",
+     "age_65_to_74", "diabetes", "stroke_or_tia_history", "vascular_disease", "sex_female")},
+    "https://doi.org/10.1378/chest.09-1584", "Adults with diagnosed atrial fibrillation; treatment decisions require current local guidelines and clinical review.",
+)
+def compute_cha2ds2_vasc(data):
+    if data["age_75_or_older"] and data["age_65_to_74"]:
+        raise ValueError("Age bands cannot both be true.")
+    score = sum(int(data[key]) for key in ("congestive_heart_failure", "hypertension", "diabetes", "vascular_disease", "sex_female"))
+    score += 2 * int(data["age_75_or_older"]) + int(data["age_65_to_74"]) + 2 * int(data["stroke_or_tia_history"])
+    return {"score": score, "recommendation": "Review this score with the clinician managing the atrial fibrillation; it is not a medication recommendation."}
 
 
-# ---------------------------------------------------------------------------
-# 4. MRC Muscle Strength Grading
-#    Reference: Medical Research Council, standard 0-5 scale.
-# ---------------------------------------------------------------------------
-
-def compute_mrc_grade(data: dict) -> dict:
-    """Evaluate MRC muscle strength grade (0-5)."""
-    grade = int(data.get("grade", 0))
-    grade = max(0, min(5, grade))
-
-    descriptions = {
-        0: "No contraction",
-        1: "Flicker or trace contraction",
-        2: "Active movement with gravity eliminated",
-        3: "Active movement against gravity",
-        4: "Active movement against gravity and resistance",
-        5: "Normal strength",
-    }
-
-    return {
-        "tool": "MRC Muscle Strength",
-        "grade": grade,
-        "description": descriptions[grade],
-    }
+@calculator(
+    "mrc_muscle", "MRC Muscle Strength", "Explain a clinician-recorded integer MRC strength grade from 0 to 5. Never infer grade from a symptom description.",
+    {"grade": (0, 5)}, "https://www.ukri.org/councils/mrc/facilities-and-resources/find-an-mrc-facility-or-resource/mrc-muscle-scale/",
+    "Requires an examined muscle strength grade.",
+)
+def compute_mrc_grade(data):
+    grade = data["grade"]
+    if int(grade) != grade:
+        raise ValueError("MRC grade must be an integer.")
+    descriptions = ["No contraction", "Flicker or trace contraction", "Active movement with gravity eliminated",
+                    "Active movement against gravity", "Active movement against gravity and resistance", "Normal strength"]
+    return {"grade": int(grade), "description": descriptions[int(grade)]}
 
 
-# ---------------------------------------------------------------------------
-# 5. BMI Calculator
-#    Reference: WHO weight classification standards.
-# ---------------------------------------------------------------------------
-
-def compute_bmi(data: dict) -> dict:
-    """Compute Body Mass Index and classify weight category."""
-    weight = float(data.get("weight_kg", 70))
-    height_cm = float(data.get("height_cm", 170))
-    height_m = height_cm / 100
-
-    if height_m <= 0:
-        return {"tool": "BMI Calculator", "error": "Invalid height."}
-
-    bmi = round(weight / (height_m ** 2), 1)
-
-    if bmi < 18.5:
-        category = "Underweight"
-        recommendation = "A BMI under 18.5 suggests underweight. Consider consulting a healthcare provider about nutrition."
-    elif bmi < 25:
-        category = "Normal weight"
-        recommendation = "A BMI of 18.5\u201324.9 is considered normal. Maintain a balanced diet and regular exercise."
-    elif bmi < 30:
-        category = "Overweight"
-        recommendation = "A BMI of 25\u201329.9 indicates overweight. Consider lifestyle modifications including diet and exercise."
-    elif bmi < 35:
-        category = "Obese (Class I)"
-        recommendation = "A BMI of 30\u201334.9 indicates Class I obesity. Consult a healthcare provider about a management plan."
-    elif bmi < 40:
-        category = "Obese (Class II)"
-        recommendation = "A BMI of 35\u201339.9 indicates Class II obesity. Medical consultation is recommended."
-    else:
-        category = "Obese (Class III)"
-        recommendation = "A BMI of 40+ indicates Class III obesity. Seek medical consultation for a comprehensive plan."
-
-    return {
-        "tool": "BMI Calculator",
-        "bmi": bmi,
-        "category": category,
-        "recommendation": recommendation,
-    }
+@calculator(
+    "bmi", "BMI Calculator", "Adult BMI with explicit weight in kg, height in cm, and age in years (20 or older). Screening measure, not a diagnosis; not for pregnancy or pediatric classification.",
+    {"weight_kg": (1, 700), "height_cm": (50, 275), "age_years": (20, 120)},
+    "https://www.cdc.gov/bmi/adult-calculator/bmi-categories.html", "Adult screening measure; does not distinguish fat from muscle or assess pregnancy.",
+)
+def compute_bmi(data):
+    value = data["weight_kg"] / (data["height_cm"] / 100) ** 2
+    category = next(label for upper, label in [(18.5, "Underweight"), (25, "Healthy weight"), (30, "Overweight"),
+                    (35, "Obesity, class 1"), (40, "Obesity, class 2"), (math.inf, "Obesity, class 3")] if value < upper)
+    return {"bmi": round(value, 1), "units": "kg/m²", "category": category}
 
 
-# ---------------------------------------------------------------------------
-# Tool Registry
-# ---------------------------------------------------------------------------
+@calculator(
+    "egfr", "eGFR (CKD-EPI 2021)", "Race-free 2021 CKD-EPI creatinine eGFR for adults with age_years, sex (female/male as used by the equation), and creatinine_mg_dl. Require explicit laboratory units. Not for acute kidney injury, pregnancy or drug dosing.",
+    {"age_years": (18, 120), "sex": {"female", "male"}, "creatinine_mg_dl": (0.1, 30)},
+    "https://www.niddk.nih.gov/research-funding/research-programs/kidney-clinical-research-epidemiology/laboratory/glomerular-filtration-rate-equations/adults",
+    "Adults with stable creatinine. An estimate, not a CKD diagnosis. Not validated here for pregnancy, acute kidney injury, or medication dosing.",
+)
+def compute_egfr(data):
+    female = data["sex"] == "female"
+    ratio = data["creatinine_mg_dl"] / (0.7 if female else 0.9)
+    value = 142 * min(ratio, 1) ** (-0.241 if female else -0.302) * max(ratio, 1) ** -1.2 * 0.9938 ** data["age_years"] * (1.012 if female else 1)
+    return {"value": round(value, 1), "units": "mL/min/1.73 m²"}
 
-TOOL_REGISTRY = {
-    "wells_dvt": {
-        "description": "Wells score for Deep Vein Thrombosis (DVT) risk stratification. Use when a patient reports leg pain, swelling, calf pain, or risk factors for blood clots.",
-        "variables": [
-            "active_cancer", "paralysis_or_cast", "bedridden_or_surgery",
-            "tenderness_along_veins", "entire_leg_swollen", "calf_swelling_gt_3cm",
-            "pitting_edema", "collateral_superficial_veins", "previous_dvt",
-            "alternative_diagnosis_likely",
-        ],
-        "function": compute_wells_dvt,
-    },
-    "cha2ds2_vasc": {
-        "description": "CHA2DS2-VASc score for stroke risk in atrial fibrillation. Use when a patient has atrial fibrillation or irregular heartbeat and needs stroke risk assessment.",
-        "variables": [
-            "congestive_heart_failure", "hypertension", "age_75_or_older",
-            "age_65_to_74", "diabetes", "stroke_or_tia_history",
-            "vascular_disease", "sex_female",
-        ],
-        "function": compute_cha2ds2_vasc,
-    },
-    "framingham": {
-        "description": "Framingham Risk Score for 10-year cardiovascular disease risk. Use when assessing general heart disease risk based on age, cholesterol, blood pressure, smoking, and diabetes.",
-        "variables": [
-            "age", "sex", "total_cholesterol", "hdl_cholesterol",
-            "systolic_bp", "bp_treated", "smoker", "diabetes",
-        ],
-        "function": compute_framingham,
-    },
-    "mrc_muscle": {
-        "description": "MRC muscle strength grading (0-5 scale). Use when assessing muscle weakness or neurological symptoms affecting strength.",
-        "variables": ["grade"],
-        "function": compute_mrc_grade,
-    },
-    "bmi": {
-        "description": "Body Mass Index (BMI) calculator. Use when a patient mentions their weight and height, or asks about weight categories, obesity, or underweight concerns.",
-        "variables": ["weight_kg", "height_cm"],
-        "function": compute_bmi,
-    },
-}
+
+@calculator(
+    "estimated_glucose", "Estimated Average Glucose", "Convert measured HbA1c percent (4–12%) to estimated average glucose; not a current blood glucose measurement. Require percent units, not mmol/mol.",
+    {"a1c_percent": (4, 12)}, "https://doi.org/10.2337/dc08-0545",
+    "Population estimate from HbA1c; unreliable when A1c is affected by altered red-cell turnover or hemoglobin variants. Not for insulin dosing.",
+)
+def compute_estimated_glucose(data):
+    value = 28.7 * data["a1c_percent"] - 46.7
+    return {"value": round(value, 1), "units": "mg/dL", "mmol_l": round(value / 18, 1)}
+
+
+@calculator(
+    "unit_conversion", "Measurement Conversion", "Convert an explicitly given measurement and units using conversion: lb_to_kg, in_to_cm, f_to_c, glucose_mg_dl_to_mmol_l, or creatinine_umol_l_to_mg_dl. Never convert drug doses.",
+    {"value": (-100, 100000), "conversion": {"lb_to_kg", "in_to_cm", "f_to_c", "glucose_mg_dl_to_mmol_l", "creatinine_umol_l_to_mg_dl"}},
+    "https://www.nist.gov/pml/special-publication-811", "Measurement conversion only; interpretation requires clinical context.",
+)
+def compute_unit_conversion(data):
+    value, conversion = data["value"], data["conversion"]
+    if conversion != "f_to_c" and value < 0:
+        raise ValueError("This measurement cannot be negative.")
+    conversions = {"lb_to_kg": (value * 0.45359237, "kg"), "in_to_cm": (value * 2.54, "cm"),
+                   "f_to_c": ((value - 32) / 1.8, "°C"), "glucose_mg_dl_to_mmol_l": (value / 18, "mmol/L"),
+                   "creatinine_umol_l_to_mg_dl": (value / 88.4, "mg/dL")}
+    result, units = conversions[conversion]
+    source = TOOL_REGISTRY["egfr"]["source"] if conversion.startswith("creatinine") else TOOL_REGISTRY["estimated_glucose"]["source"] if conversion.startswith("glucose") else TOOL_REGISTRY["unit_conversion"]["source"]
+    return {"value": round(result, 3), "units": units, "source": source}

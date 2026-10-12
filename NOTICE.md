@@ -1,17 +1,25 @@
 # Third-party assets and services
 
-The [MIT license](LICENSE) covers OpenMed application code and documentation. It does not replace the licenses of third-party data, models, fonts, or hosted APIs.
+The [MIT license](LICENSE) covers medical-harness application code and documentation. It does not replace the licenses of third-party data, models, fonts, or hosted APIs.
 
 ## BodyParts3D anatomy data
 
-The layered GLB files and structure metadata in `static/assets/anatomy/` are derived from [BodyParts3D](https://lifesciencedb.jp/bp3d/), © The Database Center for Life Science, under [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/). The geometry has been simplified, reorganized into layers, and compressed. Attribution and a license link are also displayed in the anatomy viewer.
+The regional GLB files and structure metadata in `static/assets/atlas/` are derived from [BodyParts3D](https://lifesciencedb.jp/bp3d/), © The Database Center for Life Science, under [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/). The geometry has been simplified, regrouped into twelve focused scenes, dequantized, and recompressed. Attribution and a license link are also displayed in the anatomy viewer. `manifest.json` records source revision and SHA-256 hashes; `scripts/build_atlas.mjs` reproduces the packs from the attributed source assets in Git history.
 
 The conversion pipeline uses assets from [anatomy-lab](https://github.com/MrH0v0/anatomy-lab), which is MIT licensed. See its repository for its license and source pipeline.
 
-An unused sample model previously stored in `static/models/` was removed because its noncommercial license did not match this project's intended open-source use.
+The previous full-body runtime assets and viewer are removed. The underlying licensed geometry is reused; these are reference structures, not generated clinical findings or patient-specific models.
+
+## Bundled browser libraries
+
+Three.js and its Meshopt decoder are bundled locally. Their MIT notices are retained in `static/vendor-licenses/` and the generated bundle notice. Build tooling is pinned in `package-lock.json`.
+
+Selected [Lucide](https://lucide.dev/) icons use the ISC license. [Instrument Sans](https://fonts.google.com/specimen/Instrument+Sans) is self-hosted under the SIL Open Font License 1.1. Their full notices are in `static/vendor-licenses/`. The eye-pressure schematic is an original application asset. The active m monogram is an SVG adaptation of the approved OpenAI-generated concept preserved in `docs/brand/`; it is not an Adobe or stock asset. No generated squirrel image is included.
+
+The educational guides use original application SVG schematics and paraphrase linked National Eye Institute, National Heart, Lung, and Blood Institute, National Institute of Diabetes and Digestive and Kidney Diseases, and National Institute of Arthritis and Musculoskeletal and Skin Diseases material. No source illustrations or clinical videos are copied. NIH does not endorse this application. The conceptual illustrations are not clinically validated simulations.
 
 ## External services
 
-OpenMed calls Cerebras and MediSearch using your own API keys. Their services, returned content, and usage terms are independent of this repository's MIT license.
+medical-harness calls Cerebras and MediSearch using your own API keys. Their services, returned content, and usage terms are independent of this repository's MIT license.
 
-The optional [HealthBench dataset](https://huggingface.co/datasets/openai/healthbench) is distributed by OpenAI under its own MIT license. It is not bundled in this repository; the evaluation guide explains how to obtain it if needed.
+DailyMed and Europe PMC/PubMed reference records remain subject to their publishers' terms. The application retrieves a small number of links or abstract excerpts and preserves source links. No HealthBench dataset is bundled; the checked-in evaluation cases are synthetic project fixtures.

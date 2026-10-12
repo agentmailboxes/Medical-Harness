@@ -1,34 +1,45 @@
 # Configuration
 
-`app/config.py` is the source of truth. Settings come from environment variables, with `.env` loaded for local runs. Start from [`.env.example`](../.env.example); never commit populated values.
+Copy `.env.example` to `.env` and fill in `CEREBRAS_API_KEY` and `MEDISEARCH_API_KEY`. The local `.env` is ignored by Git, Docker, and Vercel. Provider names in these keys are intentional; the product is medical-harness.
 
-## Required
+Settings are validated at startup. Invalid budgets, retry counts, or concurrency values prevent startup rather than creating unbounded behavior. Runtime environment values override `.env`.
 
-| Variable | Purpose |
+| Variable | Default |
 | --- | --- |
-| `CEREBRAS_API_KEY` | Authenticates model calls to Cerebras Cloud |
-| `MEDISEARCH_API_KEY` | Authenticates evidence retrieval from MediSearch |
+| `CEREBRAS_API_KEY` | `` |
+| `CEREBRAS_MODEL` | `gpt-oss-120b` |
+| `CEREBRAS_BASE_URL` | `https://api.cerebras.ai/v1` |
+| `LLM_TEMPERATURE` | `0.3` |
+| `LLM_MAX_TOKENS` | `4096` |
+| `LLM_TIMEOUT_SECONDS` | `45` |
+| `LLM_MAX_RETRIES` | `2` |
+| `CEREBRAS_PROMPT_CACHE_KEY` | `` |
+| `MEDISEARCH_API_KEY` | `` |
+| `MAX_EVIDENCE_ARTICLES` | `8` |
+| `MAX_TLDR_CHARS` | `400` |
+| `MAX_SUMMARY_CHARS` | `1500` |
+| `MAX_ANSWER_CHARS` | `24000` |
+| `EVIDENCE_CACHE_ENTRIES` | `128` |
+| `EVIDENCE_CACHE_TTL_SECONDS` | `600` |
+| `STEP_CACHE_ENTRIES` | `256` |
+| `STEP_CACHE_TTL_SECONDS` | `120` |
+| `PORT` | `8080` |
+| `LOG_LEVEL` | `INFO` |
+| `CORS_ORIGINS` | `` |
+| `REQUEST_TIMEOUT_SECONDS` | `150` |
+| `MAX_CONCURRENT_REQUESTS` | `8` |
+| `METRICS_TOKEN` | `` |
+| `MAX_CONVERSATION_MESSAGES` | `39` |
+| `MAX_MESSAGE_CHARS` | `8000` |
+| `MAX_CONVERSATION_CHARS` | `32000` |
+| `MAX_REQUEST_BYTES` | `262144` |
+| `RATE_LIMIT_REQUESTS` | `20` |
+| `RATE_LIMIT_WINDOW_SECONDS` | `60` |
 
-The app validates both at startup. Tests supply placeholder keys and mock provider behavior.
+The total request deadline covers all steps. Providers have shorter timeouts, connection pooling, and circuit breakers that open after three failures for 30 seconds. Only one recovery probe is allowed after cooldown. LLM and primary evidence retry transient failures within fixed attempt limits; reference tools make one bounded attempt. LLM authentication failures are not retried. DailyMed and Europe PMC need no key; each lookup is limited to eight seconds, three records, and 256 KiB. Buffered JSON and evidence SSE are capped at 256 KiB; LLM SSE has a 2 MiB total and 64 KiB line cap.
 
-## Common optional settings
+A zero cache capacity or TTL disables storage. Cached classifications and evidence contain sensitive derived text in process memory, are scoped to a random HTTP-only browser session, and expire. They are never written to disk. All-waiter cancellation also cancels the shared provider task; one cancelled waiter does not interrupt another. Completed answers are not cached. Cache and quota limits are per process, not global across Vercel instances.
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `CEREBRAS_MODEL` | `gpt-oss-120b` | Cerebras model name |
-| `CEREBRAS_BASE_URL` | `https://api.cerebras.ai/v1` | Provider endpoint |
-| `CEREBRAS_PROMPT_CACHE_KEY` | empty | Optional cache routing key if enabled on your account |
-| `PORT` | `8080` | Local/container listening port |
-| `LOG_LEVEL` | `INFO` | Application log level |
-| `CORS_ORIGINS` | empty | Comma-separated cross-origin browser origins; same-origin UI needs none |
-| `REQUEST_TIMEOUT_SECONDS` | `150` | Maximum pipeline time per buffered or streamed request |
-| `MAX_CONCURRENT_REQUESTS` | `8` | Concurrent chat slots per process |
-| `RATE_LIMIT_REQUESTS` | `20` | Chat requests per client per window, per process |
-| `RATE_LIMIT_WINDOW_SECONDS` | `60` | Rate-limit window length |
-| `METRICS_TOKEN` | empty | Bearer token for `/api/metrics`; empty disables access |
+Set `METRICS_TOKEN` to expose aggregate token, cache, circuit and outcome metrics through authenticated `/api/metrics`. No patient text or API keys are included. Set `CORS_ORIGINS` only when a separate trusted frontend needs access. An empty value is suitable for the same-origin UI.
 
-Other model, cache, message, and evidence-budget settings are listed in `app/config.py`. Values such as `LLM_TIMEOUT_SECONDS` and `LLM_MAX_RETRIES` affect provider behavior. The in-memory cache and limiter do not coordinate across Vercel Function instances or multiple containers.
-
-## Production notes
-
-Set secrets in your hosting platform's environment variable UI. Do not copy `.env` into a container image or publish it in a deployment bundle. If you change a Vercel environment variable, redeploy so the new value reaches the Function. Review [SECURITY.md](../SECURITY.md) before accepting real patient information.
+`VERCEL_PREVIEW_FEEDBACK_ENABLED=0` is a Vercel platform setting for previews, not a Python application setting. It suppresses toolbar injection. Vercel sets `VERCEL=1` itself; do not set it on other hosts, where forwarded geographic headers are not trusted. The pinned `tzdata` dependency supplies IANA time-zone rules on Windows and minimal containers. Request context is documented in [API.md](API.md).

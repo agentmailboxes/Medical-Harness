@@ -1,26 +1,28 @@
-# OpenMed
+# medical-harness
 
-Ask a health question and get an evidence-grounded answer with source articles. OpenMed combines a FastAPI agent, clinical calculators, and an interactive 3D anatomy viewer in a single web application.
+Ask a health question and get an evidence-grounded answer with source articles. medical-harness combines a FastAPI agent, clinical calculators, and an interactive 3D anatomy viewer in a single web application.
 
-**[Try the live app](https://medisearch-agent.vercel.app/)** · [How it works](docs/ARCHITECTURE.md) · [Reliability harness](docs/RELIABILITY.md) · [Contributing](CONTRIBUTING.md)
+[How it works](docs/ARCHITECTURE.md) · [Tools and reliability](docs/RELIABILITY.md) · [Evaluation loop](docs/EVALUATION.md) · [Research decisions](docs/RESEARCH.md)
 
-> OpenMed provides educational information, not a diagnosis or a substitute for a clinician. For emergencies, contact local emergency services.
+> medical-harness provides educational information, not a diagnosis or a substitute for a clinician. For emergencies, contact local emergency services.
 
-![OpenMed home screen in light theme](docs/media/desktop-light.png)
+![medical-harness home screen in light theme](docs/media/desktop-light.png)
 
-[More screenshots and a short screen recording](docs/VISUALS.md)
+[Desktop and mobile screenshots](docs/VISUALS.md)
 
 ## What you can do
 
 - Ask a question in plain language and follow up in the same conversation.
 - Read an answer linked to medical source articles. If retrieval fails, the agent does not invent supporting sources.
-- Use deterministic clinical calculators when relevant to the question.
-- Explore anatomy by layer, region, or named structure in the 3D body map.
+- Use seven calculators and converters with explicit inputs, units, and source references.
+- Find official US medicine label links and PubMed-indexed research abstracts when relevant.
+- Open a focused 3D reference scene when a spatial explanation helps the question. General questions download no 3D assets.
+- Explore sourced visual explanations of eye pressure, asthma, reflux, stones, joint changes, discs, and arterial plaque when relevant. These compare mechanisms rather than simulate your body.
 - Switch between light and dark themes on desktop or mobile.
 
 ## Run locally
 
-You need Python 3.10 or newer (3.12 is recommended), [uv](https://docs.astral.sh/uv/getting-started/installation/), and API keys from [Cerebras Cloud](https://inference-docs.cerebras.ai/console/api-keys) and [MediSearch Developers](https://medisearch.io/developers/docs). The keys belong to those services; Vercel does not provide them.
+You need Python 3.12 or newer, [uv](https://docs.astral.sh/uv/getting-started/installation/), and API keys from [Cerebras Cloud](https://inference-docs.cerebras.ai/console/api-keys) and [MediSearch Developers](https://medisearch.io/developers/docs). The keys belong to those services; Vercel does not provide them. DailyMed and Europe PMC lookups need no additional key.
 
 ```bash
 git clone https://github.com/ompathak2004/Medical-Harness.git
@@ -31,17 +33,15 @@ uv sync --locked
 Copy the example configuration and fill in the two required keys:
 
 ```bash
-# macOS / Linux
 cp .env.example .env
-
-# Windows PowerShell
-Copy-Item .env.example .env
 ```
+
+On Windows PowerShell, use `Copy-Item .env.example .env`.
 
 Set `CEREBRAS_API_KEY` and `MEDISEARCH_API_KEY` in `.env`, then start the app:
 
 ```bash
-uv run medisearch-agent
+uv run medical-harness
 ```
 
 Open <http://localhost:8080>. Check <http://localhost:8080/api/health> if the page does not load. The interactive API reference is at <http://localhost:8080/docs>.
@@ -51,8 +51,8 @@ The `.env` file is ignored by Git. Do not commit keys or put them in screenshots
 ### Docker
 
 ```bash
-docker build -t openmed .
-docker run --env-file .env -p 8080:8080 openmed
+docker build -t medical-harness .
+docker run --env-file .env -p 8080:8080 medical-harness
 ```
 
 ## Repository map
@@ -64,9 +64,10 @@ docker run --env-file .env -p 8080:8080 openmed
 | `app/pipeline.py` | Triage, retrieval, calculators, generation, safety review |
 | `app/prompts.py` | LLM instructions and output formats |
 | `app/llm.py`, `app/evidence.py` | Cerebras and MediSearch clients |
-| `app/tools/` | Clinical calculators and anatomy region detection |
+| `app/tools/` | Validated calculators, reference lookups, and anatomy selection |
 | `static/` | Browser UI, styles, scripts, and licensed anatomy assets |
-| `tests/` | Mocked API and deterministic pipeline tests |
+| `tests/` | Offline API/pipeline tests and real-browser UI tests |
+| `evals/` | Synthetic live evaluations and an offline comparison gate |
 | `docs/` | Architecture, API, deployment, and visual walkthrough |
 
 Read [the architecture guide](docs/ARCHITECTURE.md) for the request flow and the [API guide](docs/API.md) for example requests and streaming events. [AGENTS.md](AGENTS.md) is the short working map for coding agents.
@@ -76,9 +77,14 @@ Read [the architecture guide](docs/ARCHITECTURE.md) for the request flow and the
 ```bash
 uv sync --locked
 uv run pytest -q
+npm ci --ignore-scripts
+npm run build
+npm run check:anatomy
+npx playwright install chromium
+npm run test:browser
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for change and pull request guidance. CI runs the test suite without production secrets. The optional HealthBench evaluation is documented in [docs/EVALUATION.md](docs/EVALUATION.md) and requires provider keys.
+Node 22+ is needed only to change or test the frontend. Self-hosted bundles and regional GLBs are checked in, so Python deployments do not need npm. Run the browser tests against a local server with fake provider keys. CI checks the bundle is current and runs offline Python, geometry, and browser checks. Optional live evaluations require `--live`; see [the evaluation guide](docs/EVALUATION.md).
 
 ## Deploy
 
@@ -89,3 +95,5 @@ Docker and DigitalOcean deployment notes are in [docs/DEPLOYMENT.md](docs/DEPLOY
 ## License and attribution
 
 The application code is [MIT licensed](LICENSE). The included BodyParts3D-derived anatomy data is licensed separately under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); see [NOTICE.md](NOTICE.md) for attribution and asset details.
+
+The mobile-first interface offers direct citation sheets, an on-demand eye-pressure visual guide, and editable time-zone/country context. Relative dates use the server clock and preserve earlier turn timestamps. See [browser screenshots](docs/VISUALS.md) and [the API contract](docs/API.md).

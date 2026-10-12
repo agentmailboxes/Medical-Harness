@@ -12,3 +12,12 @@ logs/
 *.md
 .dockerignore
 Dockerfile
+
+.artifacts/
+node_modules/
+.vercel/
+docs/
+test-results/
+playwright-report/
+evals/
+data/

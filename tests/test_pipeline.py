@@ -1,28 +1,27 @@
-"""Pipeline flow tests with mocked LLM and evidence clients."""
-
 import json
 
 import pytest
 
 from app.pipeline import AgentPipeline, CLARIFICATION_INTRO, ReviewUnavailable
+from app.tools.education import VISUAL_IDS
 
 
 class FakeLLM:
-    """Scripted LLM: returns responses keyed by system-prompt substring."""
+
 
     def __init__(self, script: dict[str, str], stream_text: str = "streamed answer [1]."):
         self.script = script
         self.stream_text = stream_text
-        self.prompts: list[str] = []  # combined system + user text per call
-        self.calls: list[tuple[str, str]] = []  # (user, system) per call
+        self.prompts: list[str] = []
+        self.calls: list[tuple[str, str]] = []
 
-    async def generate(self, user: str, system: str | None = None) -> str:
+    async def generate(self, user: str, system: str | None = None, **kwargs) -> str:
         combined = f"{system or ''}\n{user}"
         self.prompts.append(combined)
         self.calls.append((user, system or ""))
         for key, response in self.script.items():
             if key in combined:
-                return response
+                return response.pop(0) if isinstance(response, list) else response
         return "{}"
 
     async def generate_stream(self, user: str, system: str | None = None):
@@ -57,6 +56,7 @@ EXTRACT_KEY = "extracting clinical variables"
 
 def make_pipeline(triage: dict, tools: dict | None = None, safety: dict | None = None,
                   anatomy: dict | None = None, extract: dict | None = None) -> AgentPipeline:
+    triage = {**triage, "anatomy": anatomy}
     script = {
         TRIAGE_KEY: json.dumps(triage),
         TOOLS_KEY: json.dumps(tools or {"selected_tools": []}),
@@ -64,6 +64,8 @@ def make_pipeline(triage: dict, tools: dict | None = None, safety: dict | None =
         SAFETY_KEY: json.dumps(safety or {"is_safe": True, "issues": [], "revised_answer": ""}),
         EXTRACT_KEY: json.dumps(extract or {}),
     }
+    if safety and safety.get("is_safe") is False and safety.get("revised_answer"):
+        script[SAFETY_KEY] = [json.dumps(safety), json.dumps({"is_safe": True})]
     return AgentPipeline(llm=FakeLLM(script), evidence=FakeEvidence())
 
 
@@ -74,7 +76,87 @@ async def collect(pipeline, conversation):
     return events
 
 
+@pytest.mark.parametrize("visual,expected", [(item, item) for item in sorted(VISUAL_IDS)] + [
+    ("unknown_visual", None), (None, None), ({"svg": "<script>"}, None), (["asthma"], None),
+])
+async def test_visual_uses_allowlist_after_review(visual, expected):
+    pipeline = make_pipeline({"action": "answer", "visual": visual})
+    events = await collect(pipeline, ["Explain eye pressure"])
+    assert events[-1][1]["visual_context"] == expected
+    assert any(SAFETY_KEY in prompt for prompt in pipeline.llm.prompts)
+
+
+@pytest.mark.parametrize("visual", sorted(VISUAL_IDS))
+async def test_emergency_suppresses_educational_visual(visual):
+    pipeline = make_pipeline({"action": "emergency", "visual": visual})
+    events = await collect(pipeline, ["Sudden severe eye pain and blurred vision"])
+    assert events[-1][1].get("visual_context") is None
+    assert events[-1][1]["type"] == "emergency"
+
+
+@pytest.mark.parametrize("visual", sorted(VISUAL_IDS))
+async def test_unavailable_evidence_suppresses_visual(visual):
+    pipeline = make_pipeline({"action": "answer", "visual": visual})
+    pipeline.evidence = FakeEvidence(articles=[])
+    result = await pipeline.run(["Explain eye pressure"], "visual-failure")
+    assert result.get("visual_context") is None
+
+
+@pytest.mark.parametrize("visual", sorted(VISUAL_IDS))
+async def test_clarification_suppresses_visual(visual):
+    pipeline = make_pipeline({"action": "ask", "visual": visual, "follow_up_questions": ["When did this start?"]})
+    result = await pipeline.run(["I have a health concern"], "visual-clarification")
+    assert result["type"] == "follow_up"
+    assert result.get("visual_context") is None
+
+
+@pytest.mark.parametrize("visual", sorted(VISUAL_IDS))
+async def test_failed_review_cannot_publish_visual(visual):
+    pipeline = make_pipeline({"action": "answer", "visual": visual}, safety={"is_safe": False})
+    events = []
+    with pytest.raises(ReviewUnavailable):
+        async for event in pipeline.run_streaming(["Explain a health topic"], "visual-review"):
+            events.append(event)
+    assert not any(event[0] in {"result", "answer_chunk"} for event in events)
+
+
+@pytest.mark.parametrize("visual,scene", [("eye_pressure", "head"), ("disc_nerve", "spine")])
+async def test_guide_and_spatial_anatomy_have_separate_purposes(visual, scene):
+    pipeline = make_pipeline({"action": "answer", "visual": visual}, anatomy={
+        "scene_id": scene, "reason": "Explore the surrounding structures.",
+    })
+    result = await pipeline.run(["Explain the mechanism and surrounding anatomy"], "visual-atlas")
+    assert result["visual_context"] == visual
+    assert (result["anatomy_context"] is None) == (visual == "eye_pressure")
+
+
 class TestAnswerPath:
+    async def test_source_appendix_is_removed_before_review(self):
+        p = make_pipeline({"action": "answer"})
+        p.llm.stream_text = "A supported explanation [1].\n\nAvailable citations: [1] Study A. URL: https://example.org/source"
+        result = await p.run(["Explain a health topic"], "citations")
+        assert result["answer"] == "A supported explanation [1]."
+        reviewed = [user.split("Available citations:\n")[0] for user, system in p.llm.calls if SAFETY_KEY in system]
+        assert all("URL: https://example.org/source" not in user for user in reviewed)
+        assert result["articles"][0]["title"] == "Study A"
+
+    async def test_revised_source_appendix_is_removed_before_second_review(self):
+        p = make_pipeline({"action": "answer"}, safety={
+            "is_safe": False, "issues": ["Revise"],
+            "revised_answer": "A revised explanation [1].\n\n**Available citations:** [1] Study A. URL: https://example.org/source",
+        })
+        result = await p.run(["Explain a health topic"], "revised-citations")
+        assert result["answer"] == "A revised explanation [1]."
+        reviews = [user for user, system in p.llm.calls if SAFETY_KEY in system]
+        assert len(reviews) == 2
+        assert "URL: https://example.org/source" not in reviews[-1]
+
+    async def test_bibliography_alone_is_not_an_answer(self):
+        p = make_pipeline({"action": "answer"})
+        p.llm.stream_text = "Available citations: [1] Study A. URL: https://example.org/source"
+        with pytest.raises(ReviewUnavailable):
+            await p.run(["Explain a health topic"], "empty-citations")
+
     async def test_full_answer_flow(self):
         p = make_pipeline({"action": "answer", "follow_up_questions": []})
         events = await collect(p, ["What is hypertension?"])
@@ -92,11 +174,11 @@ class TestAnswerPath:
     async def test_safety_revision_replaces_answer(self):
         p = make_pipeline(
             {"action": "answer"},
-            safety={"is_safe": False, "issues": ["overclaim"], "revised_answer": "revised safe answer"},
+            safety={"is_safe": False, "issues": ["overclaim"], "revised_answer": "revised safe answer [1]"},
         )
         events = await collect(p, ["Is coffee good for me?"])
         result = events[-1][1]
-        assert result["answer"] == "revised safe answer"
+        assert result["answer"] == "revised safe answer [1]"
 
     async def test_run_returns_final_result(self):
         p = make_pipeline({"action": "answer"})
@@ -124,7 +206,7 @@ class TestFollowUpPath:
         p = make_pipeline(
             {"action": "ask", "follow_up_questions": ["More?"], "preliminary_info": "info"}
         )
-        # One prior assistant clarification form reaches the configured limit.
+
         conversation = [
             "I have a headache",
             CLARIFICATION_INTRO + " How long has it lasted? Any fever?",
@@ -227,7 +309,7 @@ class TestEmergencyPath:
         assert result["type"] == "emergency"
         assert result["emergency"] is True
         assert "emergency" in result["emergency_message"].lower() or result["emergency_message"]
-        # No tools/evidence steps should have run.
+
         step_names = [e[1]["step"] for e in events if e[0] == "step"]
         assert "tools" not in step_names
         assert "evidence" not in step_names
@@ -235,16 +317,16 @@ class TestEmergencyPath:
     async def test_emergency_default_message(self):
         p = make_pipeline({"action": "emergency", "emergency_message": ""})
         result = await p.run(["stroke symptoms"], "cid")
-        assert result["emergency_message"]  # default applied
+        assert result["emergency_message"]
 
 
 class TestDegradation:
     async def test_triage_failure_stops_generation(self):
         class BrokenTriageLLM(FakeLLM):
-            async def generate(self, user, system=None):
+            async def generate(self, user, system=None, **kwargs):
                 if TRIAGE_KEY in f"{system or ''}\n{user}":
                     raise RuntimeError("boom")
-                return await super().generate(user, system)
+                return await super().generate(user, system, **kwargs)
 
         script = {
             TOOLS_KEY: json.dumps({"selected_tools": []}),
@@ -259,7 +341,7 @@ class TestDegradation:
         class BrokenStreamLLM(FakeLLM):
             async def generate_stream(self, user, system=None):
                 raise RuntimeError("stream down")
-                yield  # pragma: no cover
+                yield
 
         script = {
             TRIAGE_KEY: json.dumps({"action": "answer"}),
@@ -280,7 +362,7 @@ class TestToolFlow:
         p = make_pipeline(
             {"action": "answer"},
             tools={"selected_tools": ["bmi"]},
-            extract={"weight_kg": 70, "height_cm": 175},
+            extract={"weight_kg": 70, "height_cm": 175, "age_years": 30},
         )
         result = await p.run(["My weight is 70kg and height 175cm, what's my BMI?"], "cid")
         assert result["tool_results"]
@@ -289,24 +371,23 @@ class TestToolFlow:
 
 class TestPromptCacheLayout:
     async def test_system_messages_identical_across_conversations(self):
-        """Each pipeline step must send a byte-identical system message for
-        different conversations, or Cerebras prefix caching cannot reuse it."""
+
+
         p = make_pipeline({"action": "answer"})
         await p.run(["What is hypertension?"], "cid1")
         first_systems = [system for _, system in p.llm.calls]
         first_users = [user for user, _ in p.llm.calls]
 
         p.llm.calls.clear()
-        p.step_cache = type(p.step_cache)()  # fresh cache so LLM is re-hit
+        p.step_cache = type(p.step_cache)()
         await p.run(["Why does my knee hurt after running?"], "cid2")
         second_systems = [system for _, system in p.llm.calls]
         second_users = [user for user, _ in p.llm.calls]
 
-        # Compare as multisets: byte-identity is the invariant, not call order
-        # (asyncio scheduling could reorder concurrent steps).
+
         assert sorted(first_systems) == sorted(second_systems)
-        assert all(s for s in first_systems)  # every call has a system message
-        assert sorted(first_users) != sorted(second_users)  # dynamic content lives in user msg
+        assert all(s for s in first_systems)
+        assert sorted(first_users) != sorted(second_users)
 
     async def test_dynamic_content_never_in_system(self):
         p = make_pipeline({"action": "answer"})
@@ -323,10 +404,10 @@ class TestStepCaching:
         calls_first = len(p.llm.calls)
         await p.run(["What is flu?"], "cid2")
         calls_second = len(p.llm.calls) - calls_first
-        # Triage, tool selection, anatomy are cached; only the streamed
-        # answer + safety check hit the LLM on the repeat run.
+
+
         assert calls_second < calls_first
-        assert p.step_cache.hits >= 3
+        assert p.step_cache.hits >= 2
 
     async def test_evidence_cache_reuses_search(self):
         class CountingEvidence(FakeEvidence):
@@ -354,6 +435,30 @@ class TestStepCaching:
 
 
 class TestTokenBudgets:
+    async def test_generation_and_each_review_receive_identical_bounded_evidence(self):
+        p = make_pipeline({"action": "answer"})
+        evidence = {
+            "articles": [{"title": "Reference", "year": "2025", "journal": "Journal",
+                          "url": "https://example.org/reference", "tldr": "x" * 2000}],
+            "response": "summary " * 1000,
+        }
+        expected = p._build_answer_user("q?", [], evidence).split("Retrieved medical source excerpts:\n", 1)[1]
+        reviews = []
+
+        async def review(user, **kwargs):
+            reviews.append(user.split("Available citations:\n", 1)[1])
+            if len(reviews) == 1:
+                return json.dumps({"is_safe": False, "issues": ["Revise"], "revised_answer": "Revised [1]."})
+            return json.dumps({"is_safe": True, "issues": [], "revised_answer": ""})
+
+        p.llm.generate = review
+        assert await p._safety_check("q?", "Draft [1].", evidence) == "Revised [1]."
+        assert reviews == [expected, expected]
+        assert "https://example.org/reference" in expected
+        assert "not an independent source" in expected
+        assert "x" * (p.max_tldr_chars + 1) not in expected
+        assert "summary " * 1000 not in expected
+
     async def test_answer_prompt_caps_articles_and_tldr(self):
         many_articles = [
             {

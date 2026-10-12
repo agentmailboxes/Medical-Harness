@@ -1,5 +1,3 @@
-"""Bounded replies for messages that do not ask for medical advice."""
-
 from __future__ import annotations
 
 import re
@@ -30,7 +28,7 @@ CONVERSATION_REPLIES = {
 
 
 def routine_kind(message: str) -> str | None:
-    """Match only complete, low-risk utterances; mixed messages go to triage."""
+
     normalized = re.sub(r"[\s.!?,]+", " ", message.casefold()).strip()
     if re.fullmatch(r"h+i+|h+e+l+o+|h+e+y+", normalized) or normalized in {
         "hello there", "hi there", "hey there", "greetings", "good morning",

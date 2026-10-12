@@ -1,0 +1,12 @@
+export const EDUCATION = {
+  eye_pressure: { title: 'Understanding eye pressure', launch: 'How eye pressure works', subtitle: 'Explore fluid drainage and treatment goals', category: 'Eye health' },
+  asthma: { title: 'How asthma affects an airway', launch: 'Inside an airway', subtitle: 'Compare an open airway with a narrowed one', category: 'Breathing' },
+  reflux: { title: 'Understanding acid reflux', launch: 'How reflux happens', subtitle: 'Follow the direction of stomach contents', category: 'Digestion' },
+  kidney_stones: { title: 'How kidney stones block urine flow', launch: 'Follow a kidney stone', subtitle: 'See the kidney, ureter, and bladder', category: 'Urinary health' },
+  gallstones: { title: 'Understanding gallstone blockage', launch: 'How bile flows', subtitle: 'Explore the gallbladder and bile ducts', category: 'Digestion' },
+  osteoarthritis: { title: 'What changes in osteoarthritis', launch: 'Inside a knee joint', subtitle: 'Compare cartilage and joint changes', category: 'Joints' },
+  disc_nerve: { title: 'How a disc can affect a nerve', launch: 'Explore discs and nerves', subtitle: 'See how neighboring structures relate', category: 'Back and spine' },
+  atherosclerosis: { title: 'How plaque changes an artery', launch: 'Inside an artery', subtitle: 'Compare an open vessel, plaque, and a clot', category: 'Heart and circulation' },
+};
+
+export const educationFor = id => Object.hasOwn(EDUCATION, id) ? EDUCATION[id] : null;

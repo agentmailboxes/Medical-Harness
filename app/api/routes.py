@@ -1,5 +1,3 @@
-"""API routes — chat (buffered + SSE streaming) and health."""
-
 from __future__ import annotations
 
 import asyncio
@@ -14,6 +12,7 @@ from fastapi.responses import StreamingResponse
 
 from app import __version__
 from app.config import get_settings
+from app.context import request_context, resolve_context, user_turn_times
 from app.pipeline import ReviewUnavailable, cache_scope
 from app.schemas import ChatRequest, ChatResponse
 
@@ -25,6 +24,8 @@ router = APIRouter(prefix="/api")
 def _validate_conversation(req: ChatRequest) -> None:
     settings = get_settings()
     conv = req.conversation
+    if req.user_turn_times and len(req.user_turn_times) != len(conv) // 2:
+        raise HTTPException(400, "Provide one timestamp per earlier user turn.")
     if len(conv) % 2 == 0:
         raise HTTPException(
             status_code=400,
@@ -35,6 +36,8 @@ def _validate_conversation(req: ChatRequest) -> None:
             status_code=413,
             detail=f"Conversation exceeds {settings.max_conversation_messages} messages.",
         )
+    if sum(map(len, conv)) > settings.max_conversation_chars:
+        raise HTTPException(413, "Conversation text is too long. Please start a new question.")
     for msg in conv:
         if not isinstance(msg, str):
             raise HTTPException(status_code=400, detail="Messages must be strings.")
@@ -57,6 +60,9 @@ async def chat(req: ChatRequest, request: Request) -> ChatResponse:
     conversation_id = req.conversation_id or str(uuid.uuid4())
     pipeline = request.app.state.pipeline
     cache_scope.set(request.state.cache_scope)
+    context = resolve_context(req.context, request.headers)
+    request_context.set(context)
+    user_turn_times.set(req.user_turn_times)
     slots = request.app.state.request_slots
     if slots.locked():
         raise HTTPException(503, "The service is busy. Please try again shortly.", headers={"Retry-After": "10"})
@@ -67,7 +73,7 @@ async def chat(req: ChatRequest, request: Request) -> ChatResponse:
             ), timeout=get_settings().request_timeout_seconds)
     except (ReviewUnavailable, asyncio.TimeoutError):
         raise HTTPException(503, "Unable to complete the answer review. Please try again.") from None
-    return ChatResponse(conversation_id=conversation_id, **result)
+    return ChatResponse(conversation_id=conversation_id, request_context=context, **result)
 
 
 @router.post("/chat/stream")
@@ -80,36 +86,43 @@ async def chat_stream(req: ChatRequest, request: Request) -> StreamingResponse:
     if slots.locked():
         raise HTTPException(503, "The service is busy. Please try again shortly.", headers={"Retry-After": "10"})
 
+    await slots.acquire()
+    context = resolve_context(req.context, request.headers)
+
     async def event_generator():
         cache_scope.set(request.state.cache_scope)
+        request_context.set(context)
+        user_turn_times.set(req.user_turn_times)
         pending = None
         stream = pipeline.run_streaming(conversation=req.conversation, conversation_id=conversation_id)
         deadline = time.monotonic() + get_settings().request_timeout_seconds
-        yield _sse("meta", {"conversation_id": conversation_id})
         try:
-            async with slots:
-                while True:
-                    if pending is None:
-                        pending = asyncio.create_task(anext(stream))
-                    remaining = deadline - time.monotonic()
-                    if remaining <= 0:
-                        raise asyncio.TimeoutError
-                    done, _ = await asyncio.wait({pending}, timeout=min(10, remaining))
-                    if await request.is_disconnected():
-                        return
-                    if not done:
-                        yield ": keep-alive\n\n"
-                        continue
-                    try:
-                        event_type, data = pending.result()
-                    except StopAsyncIteration:
-                        break
-                    pending = None
-                    yield _sse(event_type, data)
+            yield _sse("meta", {"conversation_id": conversation_id, "request_context": context.model_dump(mode="json")})
+            while True:
+                if pending is None:
+                    pending = asyncio.create_task(anext(stream))
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise asyncio.TimeoutError
+                done, _ = await asyncio.wait({pending}, timeout=min(10, remaining))
+                if await request.is_disconnected():
+                    return
+                if not done:
+                    yield ": keep-alive\n\n"
+                    continue
+                try:
+                    event_type, data = pending.result()
+                except StopAsyncIteration:
+                    break
+                pending = None
+                if event_type == "result":
+                    data = ChatResponse(conversation_id=conversation_id, request_context=context, **data).model_dump(mode="json")
+                yield _sse(event_type, data)
         except Exception:
             logger.warning("chat_stream.failed")
             yield _sse("error", {"detail": "Unable to complete your answer safely. Please try again."})
         finally:
+            slots.release()
             if pending is not None:
                 pending.cancel()
                 await asyncio.gather(pending, return_exceptions=True)
@@ -129,7 +142,7 @@ async def health() -> dict:
 
 @router.get("/metrics")
 async def metrics(request: Request) -> dict:
-    """Token-usage and cache statistics. Numbers only — no PHI, no text."""
+
     token = get_settings().metrics_token
     if not token or not secrets.compare_digest(request.headers.get("authorization", ""), f"Bearer {token}"):
         raise HTTPException(404, "Not found")

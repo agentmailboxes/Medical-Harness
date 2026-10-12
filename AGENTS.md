@@ -1,4 +1,4 @@
-# Working on OpenMed
+# Working on medical-harness
 
 This file is the short starting point for coding agents. Follow the user's current request first; use these notes to find the right files and preserve the application's safety behavior.
 
@@ -16,8 +16,10 @@ This file is the short starting point for coding agents. Follow the user's curre
 - `app/llm.py` and `app/evidence.py`: external provider calls. Do not log prompts, patient text, or keys.
 - `app/prompts.py`: model instructions. Changes here can affect safety and citations.
 - `app/tools/clinical.py`: deterministic calculators. `app/tools/anatomy.py`: body-region selection.
-- `static/index.html`, `static/js/`, `static/css/`: browser UI. There is no Tailwind or frontend build step.
-- `static/assets/anatomy/`: BodyParts3D-derived data; preserve attribution in `NOTICE.md` and the viewer.
+- `static/index.html`, `static/js/`, `static/css/`: browser sources; `npm run build` updates checked-in hashed bundles in `static/dist/`.
+- `static/assets/atlas/`: focused BodyParts3D-derived scenes; preserve attribution in `NOTICE.md` and the viewer. Validate with `npm run check:anatomy`.
+- `app/tools/references.py`: bounded DailyMed and Europe PMC lookups.
+- `evals/`: synthetic evaluations and the offline comparison gate; never enable live calls in routine tests.
 - `tests/`: mocked API and pipeline tests.
 
 ## Invariants
@@ -37,5 +39,6 @@ This file is the short starting point for coding agents. Follow the user's curre
 - For configuration changes: update `.env.example` and [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 - For visual changes: inspect desktop and narrow mobile widths in both themes and update the screenshots when the published UI changes.
 - Run `uv run pytest -q` and `git diff --check` before committing.
+- For browser changes, run `npm run build`, `npm run check:anatomy`, and `npm run test:browser`. Keep generated bundles in the same commit as their source.
 
-The Vercel project is linked locally for CLI deployment. GitHub integration was not connected at the time of writing, so pushing `main` alone may not redeploy it. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+Use the local Vercel project link for preview deployment. Do not assume a Git push triggers deployment; verify the project's Git integration. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).

@@ -1,13 +1,10 @@
-# DigitalOcean App Platform spec for MediSearch Agent.
-# Deploy: doctl apps create --spec deploy/app-spec.yaml
-# Secrets are provided as encrypted env vars at deploy time — never commit values.
-name: medisearch-agent
+name: medical-harness
 region: blr
 services:
   - name: web
     image:
       registry_type: DOCR
-      repository: medisearch-agent
+      repository: medical-harness
       tag: latest
     instance_size_slug: basic-xxs
     instance_count: 1

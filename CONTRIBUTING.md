@@ -1,6 +1,6 @@
-# Contributing to OpenMed
+# Contributing to medical-harness
 
-Thanks for helping improve OpenMed. Issues and pull requests are welcome for bugs, accessibility, documentation, reliability, and carefully scoped features.
+Thanks for helping improve medical-harness. Issues and pull requests are welcome for bugs, accessibility, documentation, reliability, and carefully scoped features.
 
 Please follow the [community code of conduct](CODE_OF_CONDUCT.md).
 
@@ -15,11 +15,17 @@ Please follow the [community code of conduct](CODE_OF_CONDUCT.md).
 ```bash
 uv sync --locked
 uv run pytest -q
+npm ci --ignore-scripts
+npm run build
+npm run check:anatomy
+npm run test:browser
 ```
 
 Tests do not require real API keys. To try the full app, copy `.env.example` to `.env` and set your own provider keys. Never include `.env`, patient information, or real API responses containing private information in a commit or issue.
 
 For UI changes, check light and dark themes at desktop and narrow mobile widths. Keep keyboard navigation and reduced-motion support working. For pipeline changes, add a focused test that covers the changed behavior or safety boundary.
+
+Commit rebuilt `static/dist/` and `static/build.json` with browser source changes. Anatomy pack generation uses the full source revision recorded in `scripts/build_atlas.mjs`; fetch that revision if your checkout is shallow. Run `npm run build:anatomy` only when changing scene selection or conversion. Keep explanations in documentation rather than inline code comments.
 
 ## Pull requests
 

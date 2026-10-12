@@ -1,91 +1,80 @@
-"""Unit tests for deterministic clinical calculators."""
+import math
 
-from app.tools.clinical import (
-    TOOL_REGISTRY,
-    compute_bmi,
-    compute_cha2ds2_vasc,
-    compute_wells_dvt,
-)
+import pytest
+
+from app.tools.clinical import TOOL_REGISTRY, compute_bmi, compute_cha2ds2_vasc, compute_wells_dvt, compute_egfr, compute_estimated_glucose, compute_mrc_grade, compute_unit_conversion
 
 
-class TestWellsDVT:
-    def test_high_risk(self):
-        result = compute_wells_dvt(
-            {
-                "active_cancer": 1,
-                "entire_leg_swollen": 1,
-                "calf_swelling_gt_3cm": 1,
-                "pitting_edema": 1,
-            }
-        )
-        assert result["score"] == 4
-        assert result["risk"] == "High"
-
-    def test_low_risk_with_alternative_diagnosis(self):
-        result = compute_wells_dvt(
-            {"tenderness_along_veins": 1, "alternative_diagnosis_likely": 1}
-        )
-        assert result["score"] == -1
-        assert result["risk"] == "Low"
-
-    def test_moderate_risk(self):
-        result = compute_wells_dvt({"previous_dvt": 1})
-        assert result["score"] == 1
-        assert result["risk"] == "Moderate"
-
-    def test_empty_input(self):
-        result = compute_wells_dvt({})
-        assert result["score"] == 0
-        assert result["risk"] == "Low"
+def complete(key, **overrides):
+    return {**dict.fromkeys(TOOL_REGISTRY[key]["variables"], 0), **overrides}
 
 
-class TestCha2ds2Vasc:
-    def test_elderly_female_with_comorbidities(self):
-        result = compute_cha2ds2_vasc(
-            {
-                "congestive_heart_failure": 1,
-                "hypertension": 1,
-                "age_75_or_older": 1,
-                "diabetes": 1,
-                "stroke_or_tia_history": 1,
-                "sex_female": 1,
-            }
-        )
-        # CHF(1) + HTN(1) + age>=75(2) + DM(1) + stroke(2) + female(1) = 8
-        assert result["score"] == 8
-
-    def test_age_bands_mutually_exclusive(self):
-        older = compute_cha2ds2_vasc({"age_75_or_older": 1, "age_65_to_74": 1})
-        assert older["score"] == 2  # 75+ wins, not additive
-
-    def test_zero(self):
-        assert compute_cha2ds2_vasc({})["score"] == 0
+def test_wells_two_level_thresholds():
+    assert compute_wells_dvt(complete("wells_dvt", previous_dvt=1))["risk"] == "DVT unlikely"
+    likely = compute_wells_dvt(complete("wells_dvt", previous_dvt=1, entire_leg_swollen=1))
+    assert likely["score"] == 2
+    assert likely["risk"] == "DVT likely"
+    assert compute_wells_dvt(complete("wells_dvt", alternative_diagnosis_likely=1))["score"] == -2
 
 
-class TestBMI:
-    def test_normal(self):
-        result = compute_bmi({"weight_kg": 70, "height_cm": 175})
-        assert abs(result["bmi"] - 22.9) < 0.1
-        assert "normal" in result["category"].lower()
-
-    def test_obese(self):
-        result = compute_bmi({"weight_kg": 120, "height_cm": 170})
-        assert result["bmi"] > 30
-
-    def test_missing_data(self):
-        result = compute_bmi({})
-        # Should not raise; returns an error/notice structure
-        assert isinstance(result, dict)
+def test_cha2ds2_vasc_and_conflicting_ages():
+    result = compute_cha2ds2_vasc(complete("cha2ds2_vasc", age_75_or_older=1, sex_female=1, hypertension=1, stroke_or_tia_history=1))
+    assert result["score"] == 6
+    assert "error" in compute_cha2ds2_vasc(complete("cha2ds2_vasc", age_75_or_older=1, age_65_to_74=1))
 
 
-class TestRegistry:
-    def test_all_tools_have_required_keys(self):
-        for key, info in TOOL_REGISTRY.items():
-            assert "description" in info, key
-            assert "variables" in info, key
-            assert callable(info["function"]), key
+@pytest.mark.parametrize("key", list(TOOL_REGISTRY))
+def test_missing_data_never_produces_score(key):
+    result = TOOL_REGISTRY[key]["function"]({})
+    assert result["error"]
+    assert result["missing_inputs"]
+    assert not {"score", "bmi", "value", "grade"}.intersection(result)
+    assert result["source"].startswith("https://")
 
-    def test_all_tools_run_with_empty_input(self):
-        for key, info in TOOL_REGISTRY.items():
-            result = info["function"]({})
-            assert isinstance(result, dict), key
+
+@pytest.mark.parametrize("weight", [-1, 0, math.nan, math.inf, True, "70"])
+def test_bmi_rejects_invalid_values(weight):
+    assert "error" in compute_bmi({"weight_kg": weight, "height_cm": 175, "age_years": 30})
+
+
+def test_bmi_unrounded_threshold_and_age_scope():
+    result = compute_bmi({"weight_kg": 99.96, "height_cm": 200, "age_years": 30})
+    assert result["bmi"] == 25.0
+    assert result["category"] == "Healthy weight"
+    assert "error" in compute_bmi({"weight_kg": 50, "height_cm": 160, "age_years": 12})
+
+
+@pytest.mark.parametrize("sex,creatinine,expected", [("male", 1, 91.7), ("female", 1, 68.6), ("female", .7, 105.3)])
+def test_egfr_reference_cases(sex, creatinine, expected):
+    result = compute_egfr({"age_years": 50, "sex": sex, "creatinine_mg_dl": creatinine})
+    assert result["value"] == pytest.approx(expected, abs=.1)
+    assert result["units"] == "mL/min/1.73 m²"
+
+
+def test_egfr_rejects_child_and_wrong_units():
+    assert "error" in compute_egfr({"age_years": 15, "sex": "male", "creatinine_mg_dl": 1})
+    assert "error" in compute_egfr({"age_years": 50, "sex": "male", "creatinine_mg_dl": 88.4})
+
+
+def test_average_glucose_reference():
+    result = compute_estimated_glucose({"a1c_percent": 7})
+    assert result["value"] == 154.2
+    assert result["mmol_l"] == 8.6
+
+
+@pytest.mark.parametrize("value", [-1, 6, 2.5, "3", True])
+def test_mrc_does_not_clamp_or_coerce(value):
+    assert "error" in compute_mrc_grade({"grade": value})
+
+
+@pytest.mark.parametrize("conversion,value,expected", [("f_to_c", 98.6, 37), ("lb_to_kg", 100, 45.359), ("in_to_cm", 10, 25.4), ("creatinine_umol_l_to_mg_dl", 88.4, 1), ("glucose_mg_dl_to_mmol_l", 180, 10)])
+def test_unit_conversions(conversion, value, expected):
+    assert compute_unit_conversion({"conversion": conversion, "value": value})["value"] == expected
+
+
+def test_boolean_string_not_truthy():
+    assert "error" in compute_wells_dvt(complete("wells_dvt", previous_dvt="false"))
+
+
+def test_approximate_framingham_removed():
+    assert "framingham" not in TOOL_REGISTRY
