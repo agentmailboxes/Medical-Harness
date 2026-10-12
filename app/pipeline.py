@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator
 
 from app.cache import TTLCache, text_key
 from app.config import get_settings
+from app.context import contextualize
 from app.conversation import CONVERSATION_REPLIES, routine_kind
 from app.evidence import EvidenceRetriever
 from app.json_utils import parse_json_response
@@ -122,7 +123,7 @@ class AgentPipeline:
     ) -> AsyncIterator[tuple[str, dict]]:
 
         t0 = time.monotonic()
-        conv_text = self._format_conversation(conversation)
+        conv_text = contextualize(conversation)
 
         yield ("step", {"step": "triage", "message": "Understanding your question…"})
         triage = await self._triage(conv_text)
@@ -218,7 +219,8 @@ class AgentPipeline:
         yield ("step", {"step": "safety", "message": "Verifying answer safety…"})
         answer = await self._safety_check(question, answer, evidence_result, tool_results)
         self._validate_answer(answer, len(evidence_result["articles"]))
-        anatomy_context = select_anatomy(triage.get("anatomy"))
+        visual_context = "eye_pressure" if triage.get("visual") == "eye_pressure" else None
+        anatomy_context = None if visual_context else select_anatomy(triage.get("anatomy"))
         yield ("answer_chunk", {"text": answer})
 
         logger.info(
@@ -237,6 +239,7 @@ class AgentPipeline:
             tool_results=tool_results,
             followups=evidence_result.get("followups", []),
             anatomy_context=anatomy_context,
+            visual_context=visual_context,
         ))
 
 
@@ -246,14 +249,6 @@ class AgentPipeline:
             key: self._outcomes[key]
             for key in ("conversation", "follow_up", "answer", "emergency", "evidence_unavailable")
         }
-
-    @staticmethod
-    def _format_conversation(conversation: list[str]) -> str:
-        lines = []
-        for i, msg in enumerate(conversation):
-            role = "Patient" if i % 2 == 0 else "Assistant"
-            lines.append(f"{role}: {msg}")
-        return "\n".join(lines)
 
     @staticmethod
     def _count_prior_clarifications(conversation: list[str]) -> int:
@@ -278,7 +273,7 @@ class AgentPipeline:
         return None if cached is self._NONE_SENTINEL else cached
 
     async def _retrieve_evidence(self, conversation: list[str], conversation_id: str) -> dict:
-        key = text_key("evidence-v4", cache_scope.get(), conversation_id, *conversation)
+        key = text_key("evidence-v5", cache_scope.get(), conversation_id, contextualize(conversation))
         async def compute():
             if inspect.iscoroutinefunction(self.evidence.search):
                 return await self.evidence.search(conversation, conversation_id)

@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 
 from app import __version__
 from app.config import get_settings
+from app.context import request_context, resolve_context, user_turn_times
 from app.pipeline import ReviewUnavailable, cache_scope
 from app.schemas import ChatRequest, ChatResponse
 
@@ -23,6 +24,8 @@ router = APIRouter(prefix="/api")
 def _validate_conversation(req: ChatRequest) -> None:
     settings = get_settings()
     conv = req.conversation
+    if req.user_turn_times and len(req.user_turn_times) != len(conv) // 2:
+        raise HTTPException(400, "Provide one timestamp per earlier user turn.")
     if len(conv) % 2 == 0:
         raise HTTPException(
             status_code=400,
@@ -57,6 +60,9 @@ async def chat(req: ChatRequest, request: Request) -> ChatResponse:
     conversation_id = req.conversation_id or str(uuid.uuid4())
     pipeline = request.app.state.pipeline
     cache_scope.set(request.state.cache_scope)
+    context = resolve_context(req.context, request.headers)
+    request_context.set(context)
+    user_turn_times.set(req.user_turn_times)
     slots = request.app.state.request_slots
     if slots.locked():
         raise HTTPException(503, "The service is busy. Please try again shortly.", headers={"Retry-After": "10"})
@@ -67,7 +73,7 @@ async def chat(req: ChatRequest, request: Request) -> ChatResponse:
             ), timeout=get_settings().request_timeout_seconds)
     except (ReviewUnavailable, asyncio.TimeoutError):
         raise HTTPException(503, "Unable to complete the answer review. Please try again.") from None
-    return ChatResponse(conversation_id=conversation_id, **result)
+    return ChatResponse(conversation_id=conversation_id, request_context=context, **result)
 
 
 @router.post("/chat/stream")
@@ -81,14 +87,17 @@ async def chat_stream(req: ChatRequest, request: Request) -> StreamingResponse:
         raise HTTPException(503, "The service is busy. Please try again shortly.", headers={"Retry-After": "10"})
 
     await slots.acquire()
+    context = resolve_context(req.context, request.headers)
 
     async def event_generator():
         cache_scope.set(request.state.cache_scope)
+        request_context.set(context)
+        user_turn_times.set(req.user_turn_times)
         pending = None
         stream = pipeline.run_streaming(conversation=req.conversation, conversation_id=conversation_id)
         deadline = time.monotonic() + get_settings().request_timeout_seconds
         try:
-            yield _sse("meta", {"conversation_id": conversation_id})
+            yield _sse("meta", {"conversation_id": conversation_id, "request_context": context.model_dump(mode="json")})
             while True:
                 if pending is None:
                     pending = asyncio.create_task(anext(stream))
@@ -107,7 +116,7 @@ async def chat_stream(req: ChatRequest, request: Request) -> StreamingResponse:
                     break
                 pending = None
                 if event_type == "result":
-                    data = ChatResponse(conversation_id=conversation_id, **data).model_dump()
+                    data = ChatResponse(conversation_id=conversation_id, request_context=context, **data).model_dump(mode="json")
                 yield _sse(event_type, data)
         except Exception:
             logger.warning("chat_stream.failed")

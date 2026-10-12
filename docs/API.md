@@ -33,6 +33,16 @@ curl -X POST http://localhost:8080/api/chat \
 
 The response has `type` (`answer`, `follow_up`, `emergency`, or `conversation`), `conversation_id`, `answer`, `articles`, `tool_results`, `followups`, `anatomy_context`, and emergency or clarification fields. A `conversation` result handles greetings, thanks, help requests, unclear messages, and unrelated requests with a short reply in `answer`. It has no articles or calculator results and uses `evidence_status: "not_applicable"`. See `app/schemas.py` for exact optional fields and defaults.
 
+### Time and country context
+
+Clients can optionally send `context: {"time_zone":"Asia/Kolkata","locale":"en-IN","country_code":"IN"}`. The zone must be a valid IANA identifier; locale is a bounded language tag; country is an optional two-letter uppercase code. Omit unknown fields. Browser settings describe the user's clock and language, not their physical location.
+
+Both responses and SSE `meta` include `request_context`: server `received_at` with local UTC offset, `local_date`, `time_zone`, `time_zone_source`, `locale`, `country_code`, and `country_source`. The server clock is authoritative. Browser time zone takes precedence; Vercel's approximate network zone is a fallback, followed by explicitly labeled UTC. A supplied country takes precedence over Vercel's approximate network country. Network hints are accepted only in the Vercel runtime (`VERCEL=1`). No precise coordinates are collected.
+
+For follow-ups, send `user_turn_times`, containing each earlier user turn's returned `received_at`, in order. Use `null` for unknown times, or omit the array entirely for legacy clients. A nonempty array must have exactly one entry per earlier user turn. Offsets must be present. These are client-supplied history annotations, not authenticated clinical observations. The current turn always uses the server clock. This preserves the date of an earlier “this morning” when a conversation crosses midnight or the user changes time zones. Exact onset and location are clarified when clinically relevant; neither is inferred from an approximate phrase or network country.
+
+`visual_context` is either `null` or `"eye_pressure"`. It offers a fixed, sourced educational visual after a reviewed answer. Emergency, clarification, routine, evidence failure, and failed review paths do not publish this visual. It does not provide a diagnosis, personalized pressure simulation, or procedural guidance. Eye-pressure education suppresses the less relevant head atlas. Clients must only render known visual IDs, never model-supplied SVG or HTML.
+
 ## Streaming chat
 
 `POST /api/chat/stream` accepts the same request and replies with `text/event-stream`:
@@ -45,7 +55,7 @@ curl -N -X POST http://localhost:8080/api/chat/stream \
 
 | Event | Meaning |
 | --- | --- |
-| `meta` | Generated or reused `conversation_id` |
+| `meta` | Generated or reused `conversation_id` and server `request_context` |
 | `step` | Current pipeline stage and human-readable message |
 | `answer_chunk` | Reviewed answer text after the safety pass |
 | `result` | Complete authoritative response; the UI renders this |

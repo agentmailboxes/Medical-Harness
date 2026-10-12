@@ -75,6 +75,28 @@ async def collect(pipeline, conversation):
     return events
 
 
+@pytest.mark.parametrize("visual,expected", [("eye_pressure", "eye_pressure"), ("unknown_visual", None)])
+async def test_visual_uses_allowlist_after_review(visual, expected):
+    pipeline = make_pipeline({"action": "answer", "visual": visual})
+    events = await collect(pipeline, ["Explain eye pressure"])
+    assert events[-1][1]["visual_context"] == expected
+    assert any(SAFETY_KEY in prompt for prompt in pipeline.llm.prompts)
+
+
+async def test_emergency_suppresses_educational_visual():
+    pipeline = make_pipeline({"action": "emergency", "visual": "eye_pressure"})
+    events = await collect(pipeline, ["Sudden severe eye pain and blurred vision"])
+    assert events[-1][1].get("visual_context") is None
+    assert events[-1][1]["type"] == "emergency"
+
+
+async def test_unavailable_evidence_suppresses_visual():
+    pipeline = make_pipeline({"action": "answer", "visual": "eye_pressure"})
+    pipeline.evidence = FakeEvidence(articles=[])
+    result = await pipeline.run(["Explain eye pressure"], "visual-failure")
+    assert result.get("visual_context") is None
+
+
 class TestAnswerPath:
     async def test_full_answer_flow(self):
         p = make_pipeline({"action": "answer", "follow_up_questions": []})
