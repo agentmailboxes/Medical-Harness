@@ -5,7 +5,9 @@ Measured locally during the refactor. These are asset sizes and control-flow che
 | Area | Change and evidence |
 | --- | --- |
 | Initial rendering | Home markup/layout arrives in HTML. Browser tests delay the module and verify the correct first screen and theme. |
-| Initial browser assets | App JS about 27.3 KiB raw / 9.8 KiB gzip; CSS 16.1 / 4.2 KiB; theme bootstrap 265 bytes raw. No external fonts or 3D requests at startup. |
+| Initial browser assets | App plus shared JS: 32.0 KiB raw / 12.3 KiB gzip; CSS: 24.7 / 6.1 KiB; theme bootstrap: 265 bytes. One self-hosted 36.1 KiB WOFF2 adds consistent typography. No external font or 3D requests at startup. |
+| Eye-pressure guide | 6.0 KiB raw / 2.6 KiB gzip, imported only when opened. No WebGL, videos, or continuously running animation on page load. |
+| Local time context | Deterministic server-clock and timezone conversion, no added model call. Minute-level temporal cache keys prevent stale relative dates but reduce cross-minute cache hits. |
 | 3D JavaScript | About 595 KiB raw / 153 KiB gzip, dynamically imported only when opening anatomy. |
 | Anatomy | One of twelve regional packs is fetched. Knee: 71 KiB, elbow: 139 KiB, hand: 232 KiB. Largest is chest, about 5 MiB; regional storage duplicates some structures and is not uniformly smaller than the former total. |
 | GPU work | All twelve scenes rendered in Chrome smoke checks. A 250 ms idle observation added zero render frames per scene. Closing releases the context and model resources. |

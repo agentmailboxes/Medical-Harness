@@ -20,7 +20,13 @@ Cache values contain sensitive derived data in memory; expired entries are remov
 
 ## Browser and anatomy
 
-The initial response already contains the home screen and home layout. A small synchronous theme script runs before CSS; startup does not replace the hero. HTML/manifests revalidate, while hashed bundles and GLBs use immutable caching. The app uses system fonts and no CDN runtime scripts. FastAPI developer documentation has a separate CSP for its Swagger/ReDoc assets.
+The initial response already contains the home screen and home layout. A small synchronous theme script runs before CSS; startup does not replace the hero. HTML/manifests revalidate, while hashed bundles and GLBs use immutable caching. DM Sans is a self-hosted 37 KB variable font with a system fallback and swap behavior. Selected Lucide icons are bundled locally. There are no CDN runtime requests. FastAPI developer documentation has a separate CSP for its Swagger/ReDoc assets.
+
+The mobile-first interface keeps a stable reading column. Numbered citations open a native modal source sheet without changing the conversation width. Dialogs preserve keyboard focus and restore the invoking control. Long answers open at their beginning. Native accordions, 44 px primary controls, consistent scrollbars, two themes, and reduced-motion styles work without a component framework.
+
+Request-local ContextVars carry validated timezone/country hints and server-clock timestamps through triage, planning, generation and review. Earlier user turns retain offset-aware timestamps supplied by the client. Temporal context contributes to cache keys at minute precision, preventing stale relative dates at midnight. Location hints never select emergency numbers. No additional model call is used for the clock.
+
+The allowlisted `eye_pressure` visual is selected during triage and published only with a reviewed answer. Its fixed, cited content and original conceptual SVG live in a separate 6 KB lazy module. No model-generated graphics execute, and no animation runs until the user explicitly starts it. The visual pauses on close and is static under reduced motion. This educational guide is separate from the anatomical mesh atlas.
 
 Anatomy context belongs to each answer. Opening its native dialog imports the viewer and downloads one region. Closing aborts loads and disposes geometry, materials, observers, listeners and WebGL resources. Rendering occurs on interaction or resize, not continuously. Keyboard controls and a searchable structure list remain usable after graphics failure.
 
@@ -28,11 +34,13 @@ Anatomy context belongs to each answer. Opening its native dialog imports the vi
 | --- | --- |
 | app/main.py | Startup/shutdown, headers, static shell |
 | app/api/routes.py, app/schemas.py | HTTP/SSE contract and validation |
+| app/context.py | Server clock, validated local context and per-turn time annotations |
 | app/pipeline.py, app/prompts.py | Bounded orchestration and reviewed answer policy |
 | app/cache.py, app/transport.py | TTL/LRU, single-flight and circuit breakers |
 | app/tools/clinical.py | Seven sourced calculators/converters |
 | app/tools/references.py | DailyMed and Europe PMC lookups |
 | static/js/anatomy-panel.js, atlas-viewer.js | Dialog and on-demand Three.js viewer |
+| static/js/education.js, context.js, dialog.js | Sourced visual guide, local settings and dialog keyboard behavior |
 | scripts/build_atlas.mjs, check_atlas.mjs | Reproducible packs and decoded geometry validation |
 | evals/ | Synthetic evaluations and an offline review gate |
 

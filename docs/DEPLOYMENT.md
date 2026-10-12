@@ -22,6 +22,8 @@ The refactor links a project named `medical-harness` and connects the GitHub rep
 
 Vercel Functions scale independently. In-memory caches, concurrency slots, and rate limits are per instance. Use external shared infrastructure if you need global quotas or durable state. The application has no user authentication or database.
 
+Preview has `VERCEL_PREVIEW_FEEDBACK_ENABLED=0` to prevent Vercel's feedback toolbar from injecting `vercel.live` scripts that conflict with the application's CSP. This takes effect on new deployments. Keep the app's script policy limited to its own assets. See [Vercel's toolbar settings](https://vercel.com/docs/vercel-toolbar/managing-toolbar).
+
 ## Docker
 
 ```bash
