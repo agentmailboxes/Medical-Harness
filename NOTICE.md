@@ -16,7 +16,7 @@ Three.js and its Meshopt decoder are bundled locally. Their MIT notices are reta
 
 Selected [Lucide](https://lucide.dev/) icons use the ISC license. [Instrument Sans](https://fonts.google.com/specimen/Instrument+Sans) is self-hosted under the SIL Open Font License 1.1. Their full notices are in `static/vendor-licenses/`. The eye-pressure schematic is an original application asset. The active m monogram is an SVG adaptation of the approved OpenAI-generated concept preserved in `docs/brand/`; it is not an Adobe or stock asset. No generated squirrel image is included.
 
-The educational guide paraphrases National Eye Institute material and links directly to its sources. NIH does not endorse this application. The conceptual illustration is not a clinically validated simulation.
+The educational guides use original application SVG schematics and paraphrase linked National Eye Institute, National Heart, Lung, and Blood Institute, National Institute of Diabetes and Digestive and Kidney Diseases, and National Institute of Arthritis and Musculoskeletal and Skin Diseases material. No source illustrations or clinical videos are copied. NIH does not endorse this application. The conceptual illustrations are not clinically validated simulations.
 
 ## External services
 

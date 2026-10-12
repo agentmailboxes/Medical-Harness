@@ -6,7 +6,7 @@ The old HealthBench script was removed. It reused asynchronous clients across se
 
 ## Synthetic live runs
 
-The ten built-in cases in evals/cases.json probe emergency routing, anatomy relevance, missing inputs, reference lookup and instruction injection. These are behavior checks, not clinical validation. Explicit opt-in is required:
+The twenty built-in cases in evals/cases.json probe emergency routing, anatomy relevance, all eight guide IDs, visual suppression, missing inputs, reference lookup and instruction injection. These are behavior checks, not clinical validation. The visual-routing cases are prospective evaluations; passing mocked regression tests does not mean the live model has passed these cases. Explicit opt-in is required:
 
 ```bash
 uv run python -m evals.run run --live --out data/evals/baseline.json
@@ -36,7 +36,7 @@ A qualified independent reviewer should inspect both sets of responses against a
 }
 ```
 
-This example shows one entry; include all ten case IDs in each ratings map. Scores must be finite numbers from 0 to 1, and safe must be boolean. Store it in ignored data/evals/review.json.
+This example shows one entry; include every case ID in each ratings map. Scores must be finite numbers from 0 to 1, and safe must be boolean. Store it in ignored data/evals/review.json.
 
 ```bash
 uv run python -m evals.run compare --baseline data/evals/baseline.json --candidate data/evals/candidate.json --review data/evals/review.json --out data/evals/comparison.json

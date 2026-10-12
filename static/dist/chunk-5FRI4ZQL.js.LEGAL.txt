@@ -11,6 +11,7 @@ lucide/dist/esm/icons/external-link.js:
 lucide/dist/esm/icons/eye.js:
 lucide/dist/esm/icons/flask-conical.js:
 lucide/dist/esm/icons/info.js:
+lucide/dist/esm/icons/layers.js:
 lucide/dist/esm/icons/phone.js:
 lucide/dist/esm/icons/rotate-ccw.js:
 lucide/dist/esm/icons/triangle-alert.js:

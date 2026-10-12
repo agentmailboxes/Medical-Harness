@@ -6,6 +6,7 @@ from pydantic import AwareDatetime, BaseModel, Field
 
 from app.context import ClientContext, RequestContext
 from app.tools.anatomy import AnatomyContext
+from app.tools.education import VisualId
 
 
 class ChatRequest(BaseModel):
@@ -25,7 +26,7 @@ class ChatResponse(BaseModel):
     followups: list[str] = []
     conversation_id: str
     anatomy_context: AnatomyContext | None = None
-    visual_context: Literal["eye_pressure"] | None = None
+    visual_context: VisualId | None = None
     request_context: RequestContext | None = None
     evidence_status: str = "available"
     emergency: bool = False

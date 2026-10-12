@@ -3,6 +3,7 @@ import json
 import pytest
 
 from app.pipeline import AgentPipeline, CLARIFICATION_INTRO, ReviewUnavailable
+from app.tools.education import VISUAL_IDS
 
 
 class FakeLLM:
@@ -75,7 +76,9 @@ async def collect(pipeline, conversation):
     return events
 
 
-@pytest.mark.parametrize("visual,expected", [("eye_pressure", "eye_pressure"), ("unknown_visual", None)])
+@pytest.mark.parametrize("visual,expected", [(item, item) for item in sorted(VISUAL_IDS)] + [
+    ("unknown_visual", None), (None, None), ({"svg": "<script>"}, None), (["asthma"], None),
+])
 async def test_visual_uses_allowlist_after_review(visual, expected):
     pipeline = make_pipeline({"action": "answer", "visual": visual})
     events = await collect(pipeline, ["Explain eye pressure"])
@@ -83,18 +86,48 @@ async def test_visual_uses_allowlist_after_review(visual, expected):
     assert any(SAFETY_KEY in prompt for prompt in pipeline.llm.prompts)
 
 
-async def test_emergency_suppresses_educational_visual():
-    pipeline = make_pipeline({"action": "emergency", "visual": "eye_pressure"})
+@pytest.mark.parametrize("visual", sorted(VISUAL_IDS))
+async def test_emergency_suppresses_educational_visual(visual):
+    pipeline = make_pipeline({"action": "emergency", "visual": visual})
     events = await collect(pipeline, ["Sudden severe eye pain and blurred vision"])
     assert events[-1][1].get("visual_context") is None
     assert events[-1][1]["type"] == "emergency"
 
 
-async def test_unavailable_evidence_suppresses_visual():
-    pipeline = make_pipeline({"action": "answer", "visual": "eye_pressure"})
+@pytest.mark.parametrize("visual", sorted(VISUAL_IDS))
+async def test_unavailable_evidence_suppresses_visual(visual):
+    pipeline = make_pipeline({"action": "answer", "visual": visual})
     pipeline.evidence = FakeEvidence(articles=[])
     result = await pipeline.run(["Explain eye pressure"], "visual-failure")
     assert result.get("visual_context") is None
+
+
+@pytest.mark.parametrize("visual", sorted(VISUAL_IDS))
+async def test_clarification_suppresses_visual(visual):
+    pipeline = make_pipeline({"action": "ask", "visual": visual, "follow_up_questions": ["When did this start?"]})
+    result = await pipeline.run(["I have a health concern"], "visual-clarification")
+    assert result["type"] == "follow_up"
+    assert result.get("visual_context") is None
+
+
+@pytest.mark.parametrize("visual", sorted(VISUAL_IDS))
+async def test_failed_review_cannot_publish_visual(visual):
+    pipeline = make_pipeline({"action": "answer", "visual": visual}, safety={"is_safe": False})
+    events = []
+    with pytest.raises(ReviewUnavailable):
+        async for event in pipeline.run_streaming(["Explain a health topic"], "visual-review"):
+            events.append(event)
+    assert not any(event[0] in {"result", "answer_chunk"} for event in events)
+
+
+@pytest.mark.parametrize("visual,scene", [("eye_pressure", "head"), ("disc_nerve", "spine")])
+async def test_guide_and_spatial_anatomy_have_separate_purposes(visual, scene):
+    pipeline = make_pipeline({"action": "answer", "visual": visual}, anatomy={
+        "scene_id": scene, "reason": "Explore the surrounding structures.",
+    })
+    result = await pipeline.run(["Explain the mechanism and surrounding anatomy"], "visual-atlas")
+    assert result["visual_context"] == visual
+    assert (result["anatomy_context"] is None) == (visual == "eye_pressure")
 
 
 class TestAnswerPath:

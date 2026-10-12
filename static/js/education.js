@@ -1,75 +1,74 @@
 import { ICON, svg } from './icons.js';
-import { escapeHtml } from './dom-utils.js';
+import { escapeHtml, escapeAttr } from './dom-utils.js';
 import { trapDialogFocus } from './dialog.js';
+import { educationFor } from './education-catalog.js';
+import { eyeGuide } from './eye-guide.js';
+import { GUIDES } from './education-guides.js';
 
-const base = 'https://www.nei.nih.gov/eye-health-information/eye-conditions-and-diseases/glaucoma';
-const states = [
-  { name: 'Fluid flow', title: 'Fluid is constantly moving', text: 'Aqueous fluid moves through the space at the front of the eye, then leaves through drainage tissue where the iris and cornea meet.', source: `${base}/glaucoma-and-eye-pressure`, label: 'NEI · Eye pressure', mode: 'flow' },
-  { name: 'Less drainage', title: 'Slower drainage can raise pressure', text: 'In open-angle glaucoma, fluid passes too slowly through the drainage tissue. Pressure can build up and put the optic nerve at risk. High pressure alone does not establish a glaucoma diagnosis.', source: `${base}/glaucoma-and-eye-pressure`, label: 'NEI · Eye pressure', mode: 'pressure' },
-  { name: 'Laser', title: 'Helping the existing drainage pathway', text: 'Laser trabeculoplasty helps fluid drain in open-angle glaucoma. Other glaucoma types use different treatments. Benefits vary, and medicine or repeat treatment may still be needed.', source: `${base}/treatment`, label: 'NEI · Laser treatment', mode: 'laser' },
-  { name: 'Surgery', title: 'Creating or improving an exit for fluid', text: 'Some operations create a new opening or use a small drainage tube; other procedures improve drainage. The aim is to lower pressure and protect remaining vision, not restore lost sight. Surgery has risks, including pressure that becomes too low and vision loss.', source: `${base}/glaucoma-surgery`, label: 'NEI · Surgery options and risks', mode: 'surgery' },
-];
 let dialog;
 let returnFocus;
+let activeGuide;
 
-function diagram() {
-  return `<svg class="eye-diagram" viewBox="0 0 500 330" role="img" aria-labelledby="eye-diagram-title eye-diagram-desc">
-    <title id="eye-diagram-title">A simplified cross-section of the eye</title>
-    <desc id="eye-diagram-desc">The front of the eye is on the left. Arrows show fluid leaving the anterior chamber through drainage tissue near the cornea and iris. The optic nerve is at the back on the right. This conceptual diagram is not to scale.</desc>
-    <path class="eye-shell" d="M138 62C217 3 362 42 388 132L443 137V188L388 193C362 283 217 322 138 263C91 240 61 205 61 162S91 84 138 62Z"/>
-    <path class="eye-inner" d="M144 77C223 28 348 57 373 143M373 183C348 267 223 297 144 248"/>
-    <path class="eye-cornea" d="M138 62C37 87 36 237 138 263"/>
-    <path class="eye-chamber" d="M136 78C58 107 58 218 136 247L137 184L124 162L137 140Z"/>
-    <path class="eye-iris" d="M138 82V140M138 184V244"/>
-    <ellipse class="eye-lens" cx="166" cy="162" rx="23" ry="48"/>
-    <path class="fluid-path" d="M170 103C126 115 126 148 112 155C88 167 88 121 123 88"/>
-    <path class="fluid-path" d="M170 221C126 209 126 176 112 169C88 157 88 203 123 236"/>
-    <path class="flow-arrow" d="m112 93 11-5-1 12m-10 131 11 5-1-12"/>
-    <circle class="drain-point" cx="128" cy="80" r="9"/><circle class="drain-point" cx="128" cy="245" r="9"/>
-    <path class="surgery-path" d="M102 119Q143 30 221 39"/>
-    <path class="diagram-leader" d="M65 160H29M166 199V285M345 164H455M129 80L103 34H32"/>
-    <text x="26" y="181">Cornea</text><text x="150" y="308">Lens</text><text x="374" y="212">Optic nerve</text><text x="28" y="24">Drainage tissue</text>
-  </svg>`;
-}
+const sourceLink = item => `<a href="${escapeAttr(item.source)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.label)} ${svg(ICON.link)}</a>`;
 
 function select(index) {
-  const state = states[index];
-  dialog.dataset.mode = state.mode;
+  const state = activeGuide.states[index];
+  if (!state) return;
+  dialog.dataset.mode = state.mode || '';
   dialog.querySelectorAll('[data-state]').forEach((button, i) => button.setAttribute('aria-pressed', String(i === index)));
-  dialog.querySelector('.education-copy').innerHTML = `<p class="section-eyebrow">${index + 1} / 4 · ${escapeHtml(state.name)}</p><h3>${escapeHtml(state.title)}</h3><p>${escapeHtml(state.text)}</p><a href="${state.source}" target="_blank" rel="noopener noreferrer">${escapeHtml(state.label)} ${svg(ICON.link)}</a>`;
+  dialog.querySelector('.education-drawing').innerHTML = activeGuide.diagram(index);
+  dialog.querySelector('.education-copy').innerHTML = `<p class="section-eyebrow">${index + 1} / ${activeGuide.states.length} · ${escapeHtml(state.name)}</p><h3>${escapeHtml(state.title)}</h3><p>${escapeHtml(state.text)}</p>${sourceLink(state)}`;
 }
 
-export function openEyeEducation(trigger) {
+function pause() {
+  dialog.classList.remove('playing');
+  const button = dialog.querySelector('.motion-control');
+  if (button) {
+    button.setAttribute('aria-pressed', 'false');
+    button.textContent = 'Play fluid movement';
+  }
+}
+
+export function openEducation(id, trigger) {
+  const meta = educationFor(id);
+  const guide = id === 'eye_pressure' ? eyeGuide : Object.hasOwn(GUIDES, id) ? GUIDES[id] : null;
+  if (!meta || !guide) return;
   returnFocus = trigger;
+  activeGuide = guide;
   if (!dialog) {
     dialog = document.createElement('dialog');
     dialog.className = 'education-dialog';
     dialog.setAttribute('aria-labelledby', 'education-title');
-    dialog.innerHTML = `<div class="sidebar-header"><div><span class="section-eyebrow">Visual guide · Eye health</span><h2 id="education-title">Understanding eye pressure</h2></div><button type="button" class="panel-close" aria-label="Close visual guide">${svg(ICON.close)}</button></div>
-      <div class="education-body"><p class="education-intro">Follow the fluid. See what treatments aim to change.</p>
-      <div class="education-steps" role="group" aria-label="Choose an explanation">${states.map((state, i) => `<button type="button" data-state="${i}" aria-pressed="${i === 0}">${escapeHtml(state.name)}</button>`).join('')}</div>
-      <figure class="education-figure">${diagram()}<figcaption>Conceptual illustration · not to scale · not your eye</figcaption></figure>
-      <button type="button" class="motion-control" aria-pressed="false">Play fluid movement</button>
-      <div class="education-copy" aria-live="polite"></div>
-      <details class="treatment-note"><summary>Where do eye drops fit in?</summary><p>Prescription drops also lower eye pressure. An eye specialist decides whether medicine, laser, surgery, or monitoring is appropriate. This guide does not choose a treatment for you.</p><a href="${base}" target="_blank" rel="noopener noreferrer">NEI · Glaucoma treatment overview</a></details>
-      <p class="education-caution">Sudden severe eye pain, red eye, blurred vision, or nausea can require immediate medical care. Do not wait for an online explanation. <a href="${base}" target="_blank" rel="noopener noreferrer">NEI · Warning signs</a></p>
-      <p class="source-note">Original educational illustration informed by the National Eye Institute. It does not show a procedure, predict pressure readings, or replace an examination.</p></div>`;
     document.body.appendChild(dialog);
     trapDialogFocus(dialog);
-    dialog.querySelector('.panel-close').addEventListener('click', () => dialog.close());
-    dialog.querySelectorAll('[data-state]').forEach(button => button.addEventListener('click', () => select(Number(button.dataset.state))));
-    dialog.querySelector('.motion-control').addEventListener('click', event => {
-      const playing = dialog.classList.toggle('playing');
-      event.currentTarget.setAttribute('aria-pressed', String(playing));
-      event.currentTarget.textContent = playing ? 'Pause fluid movement' : 'Play fluid movement';
+    dialog.addEventListener('click', event => {
+      const target = event.target.closest('button');
+      if (!target) return;
+      if (target.classList.contains('panel-close')) dialog.close();
+      if (target.hasAttribute('data-state')) select(Number(target.dataset.state));
+      if (target.classList.contains('motion-control')) {
+        const playing = dialog.classList.toggle('playing');
+        target.setAttribute('aria-pressed', String(playing));
+        target.textContent = playing ? 'Pause fluid movement' : 'Play fluid movement';
+      }
     });
     dialog.addEventListener('close', () => {
-      dialog.classList.remove('playing');
-      dialog.querySelector('.motion-control').setAttribute('aria-pressed', 'false');
-      dialog.querySelector('.motion-control').textContent = 'Play fluid movement';
-      returnFocus?.focus({ preventScroll: true });
+      pause();
+      if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
     });
   }
+  pause();
+  dialog.dataset.guide = id;
+  dialog.innerHTML = `<div class="sidebar-header"><div><span class="section-eyebrow">Visual guide · ${escapeHtml(meta.category)}</span><h2 id="education-title">${escapeHtml(meta.title)}</h2></div><button type="button" class="panel-close" aria-label="Close visual guide">${svg(ICON.close)}</button></div>
+    <div class="education-body"><p class="education-intro">${escapeHtml(guide.intro)}</p>
+    <div class="education-steps" role="group" aria-label="Choose an explanation">${guide.states.map((state, i) => `<button type="button" data-state="${i}" aria-pressed="${i === 0}">${escapeHtml(state.name)}</button>`).join('')}</div>
+    <figure class="education-figure"><div class="education-drawing"></div><figcaption>${escapeHtml(guide.caption || 'Conceptual illustration · not to scale · not a scan of your body')}</figcaption></figure>
+    ${guide.motion ? '<button type="button" class="motion-control" aria-pressed="false">Play fluid movement</button>' : ''}
+    <div class="education-copy" aria-live="polite"></div>
+    <details class="treatment-note"><summary>${escapeHtml(guide.note.title)}</summary><p>${escapeHtml(guide.note.text)}</p>${sourceLink(guide.note)}</details>
+    ${guide.caution ? `<p class="education-caution">${escapeHtml(guide.caution.text)} ${sourceLink(guide.caution)}</p>` : ''}
+    <p class="source-note">${escapeHtml(guide.footer || 'Original educational illustration informed by the linked NIH sources. It explains a mechanism; it cannot identify the cause of symptoms or select a treatment.')}</p></div>`;
   select(0);
   dialog.showModal();
+  dialog.scrollTop = 0;
 }

@@ -48,3 +48,14 @@ def test_emergency_check_rejects_normal_tools_and_anatomy():
     checks = check_result({"type": "emergency", "anatomy": None}, {"type": "emergency", "emergency": True, "tool_results": [{"tool": "BMI"}], "anatomy_context": {"scene_id": "chest"}})
     assert not checks["emergency_isolation"]
     assert not checks["anatomy_relevance"]
+
+
+def test_visual_evaluation_rejects_wrong_topic_and_emergency_visuals():
+    checks = check_result({"type": "answer", "anatomy": None, "visual": "asthma"}, {
+        "type": "answer", "visual_context": "reflux", "articles": [{}], "evidence_status": "available",
+    })
+    assert not checks["visual_relevance"]
+    checks = check_result({"type": "emergency", "anatomy": None}, {
+        "type": "emergency", "emergency": True, "visual_context": "asthma",
+    })
+    assert not checks["emergency_isolation"]

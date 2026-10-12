@@ -8,6 +8,7 @@ import {
   toolCardRows, toolHeadline,
 } from './dom-utils.js';
 import { AnatomyPanel } from './anatomy-panel.js';
+import { educationFor } from './education-catalog.js';
 const anatomy = new AnatomyPanel(insertAnatomyText);
 const messageAnatomy = new Map();
 
@@ -238,7 +239,8 @@ function finalizeAnswer(wrap, data, msgId) {
   html += `<div class="answer-body">${renderAnswerBody(data.answer || '', currentArticles, msgId)}</div>`;
   if (data.tool_results?.length) html += `<div class="answer-tools"><div class="section-eyebrow">Tools used</div>${data.tool_results.map(renderToolCard).join('')}</div>`;
   html += renderSourcesGrid(currentArticles, msgId);
-  if (data.visual_context === 'eye_pressure') html += `<button type="button" class="visual-launch" data-action="open-education">${svg(ICON.eye)}<span><strong>How eye pressure works</strong><small>Explore fluid drainage and treatment goals</small></span>${svg(ICON.arrowRight)}</button>`;
+  const guide = data.type === 'answer' && educationFor(data.visual_context);
+  if (guide) html += `<button type="button" class="visual-launch" data-action="open-education" data-guide="${escapeAttr(data.visual_context)}">${svg(data.visual_context === 'eye_pressure' ? ICON.eye : ICON.layers)}<span><strong>${escapeHtml(guide.launch)}</strong><small>${escapeHtml(guide.subtitle)}</small></span>${svg(ICON.arrowRight)}</button>`;
   if (data.anatomy_context) html += anatomyToggleButtonHtml(data.anatomy_context, msgId);
   if ((data.answer || '').trim()) html += renderMsgActions(msgId);
   msgEl.innerHTML = html;
@@ -533,7 +535,7 @@ chatContainer.addEventListener('click', e => {
       break;
     case 'open-education': {
       const version = sessionVersion;
-      import('./education.js').then(module => { if (version === sessionVersion && el.isConnected) module.openEyeEducation(el); }).catch(() => { if (version === sessionVersion) systemErrorMessage('The visual could not load. Please try again.'); });
+      import('./education.js').then(module => { if (version === sessionVersion && el.isConnected) module.openEducation(el.dataset.guide, el); }).catch(() => { if (version === sessionVersion) systemErrorMessage('The visual could not load. Please try again.'); });
       break;
     }
     case 'not-sure': {

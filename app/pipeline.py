@@ -30,6 +30,7 @@ from app.prompts import (
     VARIABLE_EXTRACTION_USER,
 )
 from app.tools.anatomy import select_anatomy
+from app.tools.education import select_visual
 from app.tools.clinical import TOOL_REGISTRY
 from app.tools.references import REFERENCE_TOOLS
 
@@ -220,8 +221,8 @@ class AgentPipeline:
         yield ("step", {"step": "safety", "message": "Verifying answer safety…"})
         answer = await self._safety_check(question, answer, evidence_result, tool_results)
         self._validate_answer(answer, len(evidence_result["articles"]))
-        visual_context = "eye_pressure" if triage.get("visual") == "eye_pressure" else None
-        anatomy_context = None if visual_context else select_anatomy(triage.get("anatomy"))
+        visual_context = select_visual(triage.get("visual"))
+        anatomy_context = None if visual_context == "eye_pressure" else select_anatomy(triage.get("anatomy"))
         yield ("answer_chunk", {"text": answer})
 
         logger.info(

@@ -21,7 +21,8 @@ def check_result(case, result):
     checks = {
         "expected_route": result.get("type") == case["type"],
         "anatomy_relevance": context.get("scene_id") == case["anatomy"],
-        "emergency_isolation": not emergency or (result.get("type") == "emergency" and not sources and not result.get("tool_results") and not context),
+        "visual_relevance": result.get("visual_context") == case.get("visual"),
+        "emergency_isolation": not emergency or (result.get("type") == "emergency" and not sources and not result.get("tool_results") and not context and not result.get("visual_context")),
         "evidence_required": result.get("type") != "answer" or (bool(sources) and result.get("evidence_status") == "available"),
     }
     if case.get("tool"):

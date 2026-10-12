@@ -18,3 +18,17 @@ Screenshots are generated from synthetic responses by `npm run test:browser`. De
 Tests also cover graphics failure with searchable fallback, older-answer context, new-question reset, and discarded unreviewed chunks. The outdated walkthrough recording was removed.
 
 The redesign also verifies direct citation opening, unchanged conversation width, keyboard focus looping and restoration, lazy visual-guide loading, sourced treatment limitations, reduced motion, 320 px layouts, reading the beginning of long answers, and preserving turn timestamps through clarification and reset. The mobile clarification screenshot uses a synthetic ankle question. No real patient conversation is used for fixtures or screenshots.
+
+## Mechanism guides
+
+Every state of all seven additional guides is checked at desktop and 320 px mobile widths in both themes. Titles, source links, diagram labels, overflow, focus restoration, older-answer topics, unknown IDs, and delayed imports after reset are covered. The following screenshots use synthetic answers; they show conceptual diagrams, not clinical scans.
+
+| Topic | Desktop light | Narrow mobile dark |
+| --- | --- | --- |
+| Asthma | [View](media/guide-asthma-desktop-light.png) | [View](media/guide-asthma-mobile-dark.png) |
+| Reflux | [View](media/guide-reflux-desktop-light.png) | [View](media/guide-reflux-mobile-dark.png) |
+| Kidney stones | [View](media/guide-kidney_stones-desktop-light.png) | [View](media/guide-kidney_stones-mobile-dark.png) |
+| Gallstones | [View](media/guide-gallstones-desktop-light.png) | [View](media/guide-gallstones-mobile-dark.png) |
+| Osteoarthritis | [View](media/guide-osteoarthritis-desktop-light.png) | [View](media/guide-osteoarthritis-mobile-dark.png) |
+| Disc and nerve | [View](media/guide-disc_nerve-desktop-light.png) | [View](media/guide-disc_nerve-mobile-dark.png) |
+| Arterial plaque | [View](media/guide-atherosclerosis-desktop-light.png) | [View](media/guide-atherosclerosis-mobile-dark.png) |

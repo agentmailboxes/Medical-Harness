@@ -260,11 +260,27 @@ dialog::backdrop { background: #00000080; backdrop-filter: blur(3px); }
 .education-dialog { width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); }
 .education-body { padding: 0 26px 24px; }
 .education-intro { color: var(--muted); font-size: 14px; line-height: 1.6; }
-.education-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; background: var(--surface); border-radius: 12px; padding: 5px; }
+.education-steps { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 5px; background: var(--surface); border-radius: 12px; padding: 5px; }
 .education-steps button { border: 0; background: transparent; padding: 12px 4px; font-size: 12px; min-height: 44px; }
 .education-steps button[aria-pressed='true'] { background: var(--raised); box-shadow: 0 1px 4px #0001; color: var(--brand); }
 .education-figure { margin: 18px 0 4px; padding: 16px 8px 12px; border: 1px solid var(--line); border-radius: 17px; background: var(--bg); }
 .eye-diagram { width: 100%; height: auto; stroke-width: 2; }
+.mechanism-diagram { width: 100%; height: auto; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.mechanism-diagram text { fill: var(--text); stroke: none; font: 16px 'Instrument Sans', sans-serif; }
+.guide-tissue { fill: var(--raised); stroke: var(--scroll); }
+.guide-soft { fill: #8dabc44a; stroke: #7898b1; }
+.guide-space { fill: var(--bg); stroke: #7898b1; }
+.guide-air { fill: var(--muted); stroke: none; }
+.guide-leader { fill: none; stroke: var(--muted); stroke-width: 1; }
+.guide-flow, .guide-arrow { fill: none; stroke: var(--text); stroke-width: 3; }
+.guide-flow { stroke-dasharray: 6 7; }
+.guide-ring { fill: none; stroke: #a87a53; stroke-width: 10; }
+.guide-channel { fill: none; stroke: #7898b1; stroke-width: 9; }
+.guide-obstruction { fill: #cda070; stroke: #98602f; stroke-width: 3; }
+.guide-cartilage { fill: none; stroke: #7898b1; }
+.guide-nerve { fill: none; stroke: #c19556; stroke-width: 9; }
+.guide-focus { fill: none; stroke: #a87a53; stroke-width: 2; stroke-dasharray: 4 4; }
+.guide-plaque { fill: #cda07080; stroke: #a87a53; }
 .eye-diagram .eye-shell { fill: var(--raised); stroke: var(--scroll); }
 .eye-diagram .eye-inner { stroke: #c3927e; stroke-width: 5; }
 .eye-diagram .eye-cornea { stroke: #729d9c; stroke-width: 4; }
@@ -300,6 +316,7 @@ dialog::backdrop { background: #00000080; backdrop-filter: blur(3px); }
  .education-body { padding: 0 18px max(24px, env(safe-area-inset-bottom)); }
  .education-steps button { font-size: 11px; }
  .education-figure { padding: 16px 0 12px; }
+ .mechanism-diagram text, .eye-diagram text { font-size: 22px; }
  .education-copy h3 { font-size: 21px; }
 }
 @media (prefers-reduced-motion: reduce) { .playing .fluid-path { animation: none; } .motion-control { display: none; } }
