@@ -10,6 +10,7 @@ from collections import Counter
 from collections.abc import AsyncIterator
 
 from app.cache import TTLCache, text_key
+from app.answer_format import remove_source_appendix
 from app.config import get_settings
 from app.context import contextualize
 from app.conversation import CONVERSATION_REPLIES, routine_kind
@@ -211,7 +212,7 @@ class AgentPipeline:
 
         except Exception as exc:
             raise ReviewUnavailable("Answer generation was interrupted. Please try again.") from exc
-        answer = "".join(answer_parts)
+        answer = remove_source_appendix("".join(answer_parts))
         if not answer.strip():
             raise ReviewUnavailable("The answer was empty")
 
@@ -428,6 +429,7 @@ class AgentPipeline:
                     return candidate
                 revised = result.get("revised_answer")
                 if attempt == 0 and result.get("is_safe") is False and isinstance(revised, str) and revised.strip():
+                    revised = remove_source_appendix(revised)
                     self._validate_answer(revised, len(articles))
                     candidate = revised
                     continue

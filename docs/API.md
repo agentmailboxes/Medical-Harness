@@ -63,6 +63,8 @@ curl -N -X POST http://localhost:8080/api/chat/stream \
 
 The server may send SSE comment keep-alives while work is pending. Consumers should ignore comments and use `result` as the final answer. It has the same validated shape as the buffered response, including `conversation_id`. The app emits the reviewed answer as one `answer_chunk`, after safety review; the browser waits for `result`.
 
+Numbered citations in `answer` refer to the structured `articles` array. Recognized duplicate bibliography sections are removed before safety review, including from a proposed revision before its second review. An empty result is rejected. The browser renders article titles as direct external links and exposes summaries through a separate Details control; it does not reconstruct references from prose.
+
 ## Metrics
 
 `GET /api/metrics` is available only when `METRICS_TOKEN` is set. Send `Authorization: Bearer <token>`. Without a matching token, the route returns 404. It reports numeric usage, cache counters, and completed outcome counts (`conversation`, `follow_up`, `answer`, `emergency`, and `evidence_unavailable`), not question text. Counts are per process or Vercel Function instance.

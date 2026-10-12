@@ -166,15 +166,11 @@ function renderSourcesGrid(articles, msgId) {
   const cards = articles.map((art, i) => {
     const title = art.title || 'Untitled article';
     const meta = [art.year, art.journal].filter(Boolean).join(' · ');
-    return `<button type="button" class="source-card" data-action="open-source" data-msg-id="${escapeAttr(msgId)}" data-idx="${i}">
-      <span class="source-num">${i + 1}</span>
-      <span class="source-card-text">
-        <span class="source-card-title">${escapeHtml(title)}</span>
-        ${meta ? `<span class="source-card-meta">${escapeHtml(meta)}</span>` : ''}
-      </span>
-    </button>`;
+    const url = safeUrl(art.url);
+    const label = `<span class="source-num">${i + 1}</span><span class="source-card-text"><span class="source-card-title">${escapeHtml(title)}</span>${meta ? `<span class="source-card-meta">${escapeHtml(meta)}</span>` : ''}</span>`;
+    return `<div class="source-card">${url ? `<a class="source-card-link" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer">${label}${svg(ICON.link)}</a>` : `<span class="source-card-link">${label}</span>`}<button type="button" class="source-details-btn" data-action="open-source" data-msg-id="${escapeAttr(msgId)}" data-idx="${i}" aria-label="Details for source ${i + 1}: ${escapeAttr(title)}">Details</button></div>`;
   }).join('');
-  return `<details class="sources-section"><summary class="sources-label">${articles.length} medical source${articles.length === 1 ? '' : 's'} <span>View evidence ↗</span></summary><div class="sources-grid">${cards}</div></details>`;
+  return `<details class="sources-section" open><summary class="sources-label">${articles.length} medical source${articles.length === 1 ? '' : 's'} <span>Open an article ↗</span></summary><div class="sources-grid">${cards}</div></details>`;
 }
 
 function anatomyToggleButtonHtml(context, msgId) {

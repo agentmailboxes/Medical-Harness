@@ -118,6 +118,26 @@ test('reference cards preserve official links and reject active content', async 
   await expect(page.locator('.tool-card script')).toHaveCount(0);
 });
 
+test('source titles open original articles while details remain in the conversation', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.goto('/');
+  await respond(page, { ...answer, anatomy_context: null, articles: [answer.articles[0], {
+    title: '<script>Invalid source</script>', url: 'javascript:alert(1)', tldr: 'Details without an external link.',
+  }] });
+  const link = page.getByRole('link', { name: /Knee anatomy reference/ });
+  await expect(link).toHaveAttribute('href', answer.articles[0].url);
+  await expect(link).toHaveAttribute('target', '_blank');
+  await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  await expect(page.locator('.source-card a')).toHaveCount(1);
+  await expect(page.locator('.source-card script')).toHaveCount(0);
+  const details = page.getByRole('button', { name: /Details for source 1/ });
+  await details.click();
+  await expect(page.getByRole('dialog', { name: 'Source details' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(details).toBeFocused();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 const eyeAnswer = {
   type: 'answer', answer: '### Understanding your question\nThis synthetic example demonstrates how to explore eye-health information and its sources [1].\n\n### A useful next step\nThe visual below explains the purpose of different approaches. It does not choose a treatment for you [1].',
   articles: [{ title: 'Glaucoma and Eye Pressure', year: '2024', journal: 'National Eye Institute', authors: ['National Eye Institute'], url: 'https://www.nei.nih.gov/eye-health-information/eye-conditions-and-diseases/glaucoma/glaucoma-and-eye-pressure', tldr: 'A synthetic source-panel fixture. Open the original page to read its findings.' }],

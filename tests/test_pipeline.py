@@ -98,6 +98,32 @@ async def test_unavailable_evidence_suppresses_visual():
 
 
 class TestAnswerPath:
+    async def test_source_appendix_is_removed_before_review(self):
+        p = make_pipeline({"action": "answer"})
+        p.llm.stream_text = "A supported explanation [1].\n\nAvailable citations: [1] Study A. URL: https://example.org/source"
+        result = await p.run(["Explain a health topic"], "citations")
+        assert result["answer"] == "A supported explanation [1]."
+        reviewed = [user.split("Available citations:\n")[0] for user, system in p.llm.calls if SAFETY_KEY in system]
+        assert all("URL: https://example.org/source" not in user for user in reviewed)
+        assert result["articles"][0]["title"] == "Study A"
+
+    async def test_revised_source_appendix_is_removed_before_second_review(self):
+        p = make_pipeline({"action": "answer"}, safety={
+            "is_safe": False, "issues": ["Revise"],
+            "revised_answer": "A revised explanation [1].\n\n**Available citations:** [1] Study A. URL: https://example.org/source",
+        })
+        result = await p.run(["Explain a health topic"], "revised-citations")
+        assert result["answer"] == "A revised explanation [1]."
+        reviews = [user for user, system in p.llm.calls if SAFETY_KEY in system]
+        assert len(reviews) == 2
+        assert "URL: https://example.org/source" not in reviews[-1]
+
+    async def test_bibliography_alone_is_not_an_answer(self):
+        p = make_pipeline({"action": "answer"})
+        p.llm.stream_text = "Available citations: [1] Study A. URL: https://example.org/source"
+        with pytest.raises(ReviewUnavailable):
+            await p.run(["Explain a health topic"], "empty-citations")
+
     async def test_full_answer_flow(self):
         p = make_pipeline({"action": "answer", "follow_up_questions": []})
         events = await collect(p, ["What is hypertension?"])
