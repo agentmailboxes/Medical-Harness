@@ -42,3 +42,14 @@ Research checked on 2026-10-12 through Firecrawl, using generic product and medi
 - [Vercel toolbar management](https://vercel.com/docs/vercel-toolbar/managing-toolbar) documents the preview feedback environment flag. Preview toolbar injection is disabled instead of broadening the application's script policy.
 
 Native HTML dialogs and accordions fit this small JavaScript application without adding React solely for Radix. Explicit keyboard loops, focus restoration, touch targets and reduced-motion behavior are tested. Lucide provides a consistent icon vocabulary; a single local variable font replaces platform-dependent typography. The visual guide is a fixed educational asset, not proof of anatomical or clinical accuracy. A clinician should review new visual topics before broadening the catalog.
+
+## Monochrome and typography refinement
+
+The October 12 follow-up uses black and neutral charcoal in dark mode, warm off-white in light mode, and a 44 px icon-only new-question control with an accessible name. Instrument Sans supplies restrained headings and a lighter wordmark; mobile answer text is 16 px and desktop answer text is 17 px. The existing book monogram remains active at the user's request. These are design decisions, not claims of clinical benefit.
+
+- [W3C contrast guidance](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html) informed text and muted-text contrast in both themes. Color is not the only indicator of an error or selected state.
+- [W3C target-size guidance](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html) informed pointer spacing; principal header and composer controls remain at least 44 px. Inline citations retain their text context and keyboard labels.
+- [Rello, Pielot and Marcos, CHI 2016](https://www.pielot.org/pubs/Rello2016-Fontsize.pdf) studied font size and spacing with 104 participants. Larger text improved their reading measures, while extreme spacing was less helpful. Their desktop Arial experiment does not establish an optimum for this mobile UI; we use the finding to avoid shrinking answer text and retain browser zoom.
+- [Instrument's typeface background](https://www.instrument.com/latest/from-old-to-bold-instrument-rebrand-signals-energetic-shift) describes the family collaboration. The locally bundled font is OFL licensed; selecting it is an aesthetic choice, not a universal readability claim.
+
+Adobe Express was retried after sign-in with Gemini 3 and Firefly Image 4. Both attempts showed a service error. A separate [monochrome concept](brand/README.md) was therefore generated with the built-in image tool. It is preserved for review and is not loaded by the application.

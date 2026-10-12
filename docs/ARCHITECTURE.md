@@ -8,7 +8,7 @@ medical-harness serves a FastAPI backend and plain HTML/CSS/JavaScript frontend.
 2. Triage runs first. Emergencies stop normal work and return fixed urgent guidance. Routine messages receive fixed nonclinical replies. Clarification asks up to three essential questions and is limited to one round. Anatomy intent is part of triage, eliminating a separate model call; only twelve validated scene IDs are accepted.
 3. Tool planning and MediSearch retrieval run concurrently. At most two relevant tools execute, with concurrent input extraction and reference requests. Calculators require supplied values and validate types, finite numbers, ranges and enums. Reference requests use fixed endpoints, eight-second total timeouts, at most three records, and a 256 KiB decoded response cap.
 4. Supplemental PubMed abstracts may join the bounded source list or supply evidence when the primary provider is unavailable. Directory-only medicine labels cannot. When abstracts alter source numbering, the primary summary is dropped to avoid stale citation indices. No sources means a fixed evidence-unavailable response.
-5. Generation is buffered. Review sees source excerpts and tool outputs. A revision is allowed once and must pass another review. Empty, interrupted, oversized or invalidly cited answers fail closed. The browser renders only the authoritative result.
+5. Generation is buffered. Generation and both review attempts share the same bounded evidence text, including source metadata and excerpts. The retrieval summary is labeled context, never an independent source. Review also sees tool outputs. A revision is allowed once and must pass another review. Empty, interrupted, oversized or invalidly cited answers fail closed. The browser renders only the authoritative result.
 
 These checks validate control flow and citation indices, not clinical truth.
 
@@ -20,7 +20,7 @@ Cache values contain sensitive derived data in memory; expired entries are remov
 
 ## Browser and anatomy
 
-The initial response already contains the home screen and home layout. A small synchronous theme script runs before CSS; startup does not replace the hero. HTML/manifests revalidate, while hashed bundles and GLBs use immutable caching. DM Sans is a self-hosted 37 KB variable font with a system fallback and swap behavior. Selected Lucide icons are bundled locally. There are no CDN runtime requests. FastAPI developer documentation has a separate CSP for its Swagger/ReDoc assets.
+The initial response already contains the home screen and home layout. A small synchronous theme script runs before CSS; startup does not replace the hero. HTML/manifests revalidate, while hashed bundles and GLBs use immutable caching. Instrument Sans is a self-hosted 30 KB variable font with a system fallback and swap behavior. Selected Lucide icons are bundled locally. There are no CDN runtime requests. FastAPI developer documentation has a separate CSP for its Swagger/ReDoc assets.
 
 The mobile-first interface keeps a stable reading column. Numbered citations open a native modal source sheet without changing the conversation width. Dialogs preserve keyboard focus and restore the invoking control. Long answers open at their beginning. Native accordions, 44 px primary controls, consistent scrollbars, two themes, and reduced-motion styles work without a component framework.
 
