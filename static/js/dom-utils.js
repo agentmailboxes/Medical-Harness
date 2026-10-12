@@ -162,7 +162,7 @@ function renderAnswerBody(raw, articles, msgId) {
       const idx = n - 1;
       const valid = Array.isArray(articles) && idx >= 0 && idx < articles.length;
       if (valid) {
-        return `<button type="button" class="citation-ref" data-action="citation-ref" data-msg-id="${escapeAttr(msgId)}" data-idx="${idx}">${n}</button>`;
+        return `<button type="button" class="citation-ref" aria-label="Read source ${n}: ${escapeAttr(articles[idx].title || 'Source details')}" data-action="citation-ref" data-msg-id="${escapeAttr(msgId)}" data-idx="${idx}">${n}</button>`;
       }
       return `<span class="citation-ref inert">${n}</span>`;
     }).join(" ");

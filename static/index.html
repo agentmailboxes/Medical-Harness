@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#ffffff">
+  <meta name="theme-color" content="#f7f8f4">
   <meta name="description" content="medical-harness — clear health information with sources and clinical tools.">
   <title>medical-harness — Ask a health question</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
@@ -14,8 +14,8 @@
 <a class="skip-link" href="#user-input">Skip to question</a>
 <header class="app-header">
   <a class="brand" href="/" aria-label="medical-harness home">
-    <span class="header-logo" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M24 8a11 11 0 1 0 0 16M20 16h9"/></svg></span>
-    <span>medical-harness</span>
+    <span class="header-logo" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M5 24V7c5-2 8.7.2 11 4 2.3-3.8 6-6 11-4v17c-5-2-8.7.2-11 4-2.3-3.8-6-6-11-4Z"/><path d="M16 11v17"/></svg></span>
+    <span>medical<span class="brand-divider">-</span>harness<small>Clarity, grounded in evidence</small></span>
   </a>
   <div class="header-status">
     <button type="button" class="new-convo-btn" id="new-convo-btn" aria-label="Start a new question"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.64-6.36M3 4v8h8"/></svg><span>New question</span></button>
@@ -31,8 +31,9 @@
     <main id="chat-container" aria-label="Health conversation">
       <div class="chat-scroll-inner" id="chat-scroll-inner">
         <section class="hero" id="hero">
-          <h2>What would you like to know?</h2>
-          <p class="hero-value-prop">Ask a health question. Get a clear answer with sources.</p>
+          <p class="hero-eyebrow"><span></span> Health questions, made clearer.</p>
+          <h1>Make sense of<br>your health questions.</h1>
+          <p class="hero-value-prop">Clear explanations, sources you can explore,<br class="desktop-break"> and a better understanding of what to ask next.</p>
         </section>
       </div>
     </main>
@@ -44,18 +45,28 @@
           <button type="button" id="stop-btn" class="stop-btn" hidden>Stop</button>
           <button type="button" id="send-btn" aria-label="Send message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg><span class="btn-spinner" aria-hidden="true"></span></button>
         </div>
+        <div class="composer-context"><span>Sources · Clinical tools · Visual explanations</span><button type="button" id="context-trigger" aria-label="Change time zone and country"></button></div>
         <div class="input-meta-row"><p class="disclaimer-footer">Medical information, not a diagnosis. For emergencies, contact local emergency services.</p><span class="input-hint"><kbd>Enter</kbd> to send · <kbd>Shift+Enter</kbd> for a new line</span></div>
+        <div class="home-discovery"><p class="section-eyebrow">A place to start</p><div class="example-grid">
+          <button type="button" data-example="How does eye pressure work?"><span data-icon="eye"></span><strong>Understand a condition</strong><span>What does eye pressure mean?</span><span class="example-arrow" data-icon="arrowRight"></span></button>
+          <button type="button" data-example="What does an HbA1c blood test measure?"><span data-icon="lab"></span><strong>Make sense of a result</strong><span>Explore a lab test in plain language</span><span class="example-arrow" data-icon="arrowRight"></span></button>
+          <button type="button" data-example="Where is the kneecap and how does it move?"><span data-icon="cube"></span><strong>See how your body works</strong><span>Explore reference anatomy in 3D</span><span class="example-arrow" data-icon="arrowRight"></span></button>
+        </div><p class="home-footnote">Ask in your own words. We’ll ask for more detail when it helps.</p></div>
         <noscript><p>JavaScript is needed to submit a question. For emergencies, contact local emergency services.</p></noscript>
       </div>
     </div>
   </div>
-  <aside class="article-sidebar" id="article-sidebar" aria-label="Source details" aria-hidden="true" inert>
-    <div class="sidebar-header"><span class="sidebar-title">Source article</span><button type="button" class="panel-close" id="article-sidebar-close" aria-label="Close source panel">×</button></div>
-    <div class="sidebar-content" id="sidebar-content"></div>
-  </aside>
 </div>
+<dialog class="source-dialog" id="article-sidebar" aria-labelledby="source-title">
+  <div class="sidebar-header"><div><span class="section-eyebrow">Behind the answer</span><h2 id="source-title">Source details</h2></div><button type="button" class="panel-close" id="article-sidebar-close" aria-label="Close source panel"><span data-icon="close"></span></button></div>
+  <div class="sidebar-content" id="sidebar-content"></div>
+</dialog>
+<dialog class="context-dialog" id="context-dialog" aria-labelledby="context-title">
+  <div class="sidebar-header"><h2 id="context-title">Your local context</h2><button type="button" class="panel-close" data-close aria-label="Close local context"><span data-icon="close"></span></button></div>
+  <form class="context-form"><p>We use your time zone to understand phrases like “this morning.” You can correct it here.</p><label for="context-zone">Time zone</label><input id="context-zone" required maxlength="80" placeholder="Asia/Kolkata" autocomplete="off" list="context-zones"><datalist id="context-zones"></datalist><label for="context-country">Country <span>(optional)</span></label><select id="context-country"><option value="">Not specified</option><option value="AU">Australia</option><option value="CA">Canada</option><option value="FR">France</option><option value="DE">Germany</option><option value="IN">India</option><option value="NZ">New Zealand</option><option value="PK">Pakistan</option><option value="SG">Singapore</option><option value="ZA">South Africa</option><option value="AE">United Arab Emirates</option><option value="GB">United Kingdom</option><option value="US">United States</option></select><p class="source-note">No GPS access. The server may receive an approximate country from your network. We ask you to confirm location when it matters for care. Settings apply to this session.</p><button type="submit" class="primary-button">Save context</button></form>
+</dialog>
 <dialog class="atlas-dialog" id="anatomy-panel" aria-labelledby="atlas-title" aria-describedby="atlas-reason">
-  <div class="atlas-header"><div><span class="atlas-eyebrow">REFERENCE ANATOMY</span><h2 id="atlas-title">Anatomy</h2></div><button type="button" class="panel-close" id="anatomy-panel-close" aria-label="Close anatomy">×</button></div>
+  <div class="atlas-header"><div><span class="atlas-eyebrow">REFERENCE ANATOMY</span><h2 id="atlas-title">Anatomy</h2></div><button type="button" class="panel-close" id="anatomy-panel-close" aria-label="Close anatomy"><span data-icon="close"></span></button></div>
   <p id="atlas-reason" class="atlas-reason"></p>
   <div class="atlas-layers" aria-label="Visible layers"><label><input type="checkbox" data-layer="skeleton" checked>Bones</label><label><input type="checkbox" data-layer="muscles">Muscles</label><label><input type="checkbox" data-layer="organs" checked>Organs</label></div>
   <div class="atlas-stage">
@@ -68,7 +79,6 @@
   <div class="atlas-explorer"><div class="atlas-search-row"><label for="atlas-search">Find a structure</label><span id="atlas-count"></span></div><input id="atlas-search" type="search" placeholder="Search this region" autocomplete="off"><select id="atlas-structures" size="4" aria-label="Structures in this region"></select><p id="atlas-selection" aria-live="polite">Select a structure in the model or list.</p><button type="button" id="atlas-use">Use this area in my question</button></div>
   <p class="atlas-attribution">Adult reference atlas, including male-specific structures. It does not show your body or diagnose a condition.<br>Adapted from <a href="https://lifesciencedb.jp/bp3d/" target="_blank" rel="noopener noreferrer">BodyParts3D</a>, © DBCLS · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></p>
 </dialog>
-<div class="panel-backdrop" id="panel-backdrop"></div>
 <div class="citation-tooltip" id="citation-tooltip" role="tooltip"></div>
 <script type="module" src="{{APP_JS}}"></script>
 </body>

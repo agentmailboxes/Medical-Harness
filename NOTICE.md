@@ -14,6 +14,10 @@ The previous full-body runtime assets and viewer are removed. The underlying lic
 
 Three.js and its Meshopt decoder are bundled locally. Their MIT notices are retained in `static/vendor-licenses/` and the generated bundle notice. Build tooling is pinned in `package-lock.json`.
 
+Selected [Lucide](https://lucide.dev/) icons use the ISC license. [DM Sans](https://fonts.google.com/specimen/DM+Sans) is self-hosted under the SIL Open Font License 1.1. Their full notices are in `static/vendor-licenses/`. The book monogram and eye-pressure schematic are original application assets. No stock logo or generated squirrel image is included.
+
+The educational guide paraphrases National Eye Institute material and links directly to its sources. NIH does not endorse this application. The conceptual illustration is not a clinically validated simulation.
+
 ## External services
 
 medical-harness calls Cerebras and MediSearch using your own API keys. Their services, returned content, and usage terms are independent of this repository's MIT license.

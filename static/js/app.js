@@ -1,3 +1,6 @@
+import { ICON, svg, hydrateIcons } from './icons.js';
+import { clientContext, initContext } from './context.js';
+import { trapDialogFocus } from './dialog.js';
 import { initTheme, toggleTheme } from './theme.js';
 import {
   escapeHtml, escapeAttr, renderMarkdown, renderAnswerBody, safeUrl,
@@ -10,6 +13,7 @@ const messageAnatomy = new Map();
 
 const chatContainer = document.getElementById('chat-container');
 const chatScrollInner = document.getElementById('chat-scroll-inner');
+const heroTemplate = document.getElementById('hero').cloneNode(true);
 const userInput = document.getElementById('user-input');
 const sendBtn = document.getElementById('send-btn');
 const inputArea = document.getElementById('input-area');
@@ -23,46 +27,27 @@ const articleSidebar = document.getElementById('article-sidebar');
 const sidebarContent = document.getElementById('sidebar-content');
 const articleSidebarClose = document.getElementById('article-sidebar-close');
 
-const panelBackdrop = document.getElementById('panel-backdrop');
 const citationTooltip = document.getElementById('citation-tooltip');
 
 let conversationId = null;
 let conversation = [];
 let currentArticles = [];
+let turnTimes = [];
 let isStreaming = false;
 let activeRequest = null;
 let sessionVersion = 0;
 let activeAnswerInput = null;
 let msgCounter = 0;
+let pendingTurnTime = null;
 
 const nextMsgId = () => 'm' + (++msgCounter);
 const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-const ICON = {
-  pulse: '<path d="M19 5a9 9 0 1 0 0 14"/><path d="M16 12h8"/>',
-  user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
-  body: '<path d="M12 2a3 3 0 0 0-3 3v1H7a1 1 0 0 0-1 1v3a4 4 0 0 0 1 2.65V20a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-7.35A4 4 0 0 0 18 10V7a1 1 0 0 0-1-1h-2V5a3 3 0 0 0-3-3z"/>',
-  close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
-  link: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',
-  copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
-  check: '<polyline points="20 6 9 17 4 12"/>',
-  warning: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17.01" x2="12" y2="17"/>',
-  retry: '<path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
-  info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8.01" x2="12" y2="8"/>',
-  phone: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>',
-  cube: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
-  arrowRight: '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
-};
-
-function svg(inner, extra = '') {
-  return `<svg viewBox="0 0 24 24" ${extra}>${inner}</svg>`;
-}
 
 function isNearBottom() {
   return chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 140;
 }
 
-const scheduleScroll = rafThrottle(() => { chatContainer.scrollTop = chatContainer.scrollHeight; });
+const scheduleScroll = rafThrottle(() => { if (isStreaming) chatContainer.scrollTop = chatContainer.scrollHeight; });
 
 function appendToChat(node) {
   const stick = isNearBottom();
@@ -73,14 +58,7 @@ function appendToChat(node) {
 function renderHero() {
   document.body.classList.add('is-home');
   if (document.getElementById('hero')) return;
-  const hero = document.createElement('section');
-  hero.className = 'hero';
-  hero.id = 'hero';
-  hero.innerHTML = `
-    <h2>What would you like to know?</h2>
-    <p class="hero-value-prop">Ask a health question. Get a clear answer with sources.</p>
-  `;
-  chatScrollInner.appendChild(hero);
+  chatScrollInner.appendChild(heroTemplate.cloneNode(true));
 }
 
 function removeHero() {
@@ -196,7 +174,7 @@ function renderSourcesGrid(articles, msgId) {
       </span>
     </button>`;
   }).join('');
-  return `<details class="sources-section"><summary class="sources-label">${articles.length} medical sources <span>View evidence ↗</span></summary><div class="sources-grid">${cards}</div></details>`;
+  return `<details class="sources-section"><summary class="sources-label">${articles.length} medical source${articles.length === 1 ? '' : 's'} <span>View evidence ↗</span></summary><div class="sources-grid">${cards}</div></details>`;
 }
 
 function anatomyToggleButtonHtml(context, msgId) {
@@ -210,7 +188,7 @@ function renderFollowUpQuestionsList(questions) {
     ${questions.map((q, i) => `<details class="question-item" ${i === 0 ? 'open' : ''}>
       <summary><span class="question-number">${i + 1}</span><span>${escapeHtml(q)}</span><span class="question-state">+</span></summary>
       <label class="sr-only" for="answer-${msgCounter}-${i}">${escapeHtml(q)}</label>
-      <textarea id="answer-${msgCounter}-${i}" name="answer-${i}" data-question="${escapeAttr(q)}" rows="2" maxlength="1800" placeholder="Your answer, or ‘not sure’" required></textarea>
+      <textarea id="answer-${msgCounter}-${i}" name="answer-${i}" data-question="${escapeAttr(q)}" rows="2" maxlength="1800" placeholder="Your answer, or ‘not sure’" required></textarea><button type="button" class="not-sure-btn" data-action="not-sure">I’m not sure</button>
     </details>`).join('')}
     <div class="clarification-footer"><span>You can edit each answer before sending.</span><button type="submit" class="submit-answers" disabled>Submit answers <span aria-hidden="true">↗</span></button></div>
   </form>`;
@@ -260,19 +238,21 @@ function finalizeAnswer(wrap, data, msgId) {
   messageAnswerText.set(msgId, data.answer || '');
 
   const msgEl = wrap.querySelector('.msg.assistant');
-  let html = '';
-  if (data.tool_results?.length) html += data.tool_results.map(renderToolCard).join('');
+  let html = `<div class="answer-eyebrow">${svg(ICON.book)}<span>${currentArticles.length ? 'An answer with sources' : 'Medical harness'}</span></div>`;
   html += `<div class="answer-body">${renderAnswerBody(data.answer || '', currentArticles, msgId)}</div>`;
+  if (data.tool_results?.length) html += `<div class="answer-tools"><div class="section-eyebrow">Tools used</div>${data.tool_results.map(renderToolCard).join('')}</div>`;
   html += renderSourcesGrid(currentArticles, msgId);
+  if (data.visual_context === 'eye_pressure') html += `<button type="button" class="visual-launch" data-action="open-education">${svg(ICON.eye)}<span><strong>How eye pressure works</strong><small>Explore fluid drainage and treatment goals</small></span>${svg(ICON.arrowRight)}</button>`;
   if (data.anatomy_context) html += anatomyToggleButtonHtml(data.anatomy_context, msgId);
   if ((data.answer || '').trim()) html += renderMsgActions(msgId);
   msgEl.innerHTML = html;
 
   if (data.followups?.length) renderFollowupChips(data.followups);
-  scheduleScroll();
+  wrap.scrollIntoView({ block: 'start', behavior: reducedMotion ? 'instant' : 'smooth' });
 }
 
 function handleResult(wrap, msgId, data) {
+  turnTimes.push(data.request_context?.received_at || pendingTurnTime || null);
   if (data.type === 'follow_up') {
     finalizeFollowUp(wrap, data, msgId);
     conversation.push(((data.preliminary_info || '') + ' ' + (data.follow_up_questions || []).join(' ')).trim());
@@ -312,22 +292,6 @@ function showCitationTooltip(refEl) {
 
 function hideCitationTooltip() { citationTooltip.classList.remove('visible'); }
 
-function scrollToSourceCard(msgId, idx) {
-  const wrap = chatScrollInner.querySelector(`[data-msg-id="${msgId}"]`);
-  const card = wrap?.querySelector(`.source-card[data-idx="${idx}"]`);
-  if (!card) return;
-  const sourceDetails = card.closest('details');
-  if (sourceDetails) sourceDetails.open = true;
-  card.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' });
-  card.classList.remove('highlight-pulse');
-  requestAnimationFrame(() => card.classList.add('highlight-pulse'));
-}
-
-function pulseCitationRef(refEl) {
-  refEl.classList.remove('highlight-pulse');
-  requestAnimationFrame(() => refEl.classList.add('highlight-pulse'));
-}
-
 function openArticleSidebar(msgId, idx) {
   const articles = messageArticles.get(msgId) || [];
   const art = articles[idx];
@@ -337,34 +301,17 @@ function openArticleSidebar(msgId, idx) {
   if (art.year) html += `<span class="sidebar-meta-tag">${escapeHtml(String(art.year))}</span>`;
   if (art.journal) html += `<span class="sidebar-meta-tag">${escapeHtml(art.journal)}</span>`;
   html += '</div>';
-  if (art.tldr) html += `<div class="sidebar-section"><div class="sidebar-section-label">Summary</div><div class="sidebar-section-content">${escapeHtml(art.tldr)}</div></div>`;
+  if (art.tldr) html += `<div class="sidebar-section"><div class="sidebar-section-label">Source summary</div><div class="sidebar-section-content">${escapeHtml(art.tldr)}</div></div>`;
   if (art.authors?.length) html += `<div class="sidebar-section"><div class="sidebar-section-label">Authors</div><div class="sidebar-authors">${escapeHtml(art.authors.join(', '))}</div></div>`;
   if (safeUrl(art.url)) html += `<a class="sidebar-link" href="${escapeAttr(safeUrl(art.url))}" target="_blank" rel="noopener noreferrer">${svg(ICON.link)}View source</a>`;
+  html += '<p class="source-note">A retrieved source summary can miss context. Open the original source to check its findings and limitations.</p>';
   sidebarContent.innerHTML = html;
-  articleSidebar.inert = false;
-  articleSidebar.classList.add('open');
+  articleSidebar.showModal();
   articleSidebarClose.focus({ preventScroll: true });
-  articleSidebar.setAttribute('aria-hidden', 'false');
-  showBackdropIfMobile();
   hideCitationTooltip();
 }
 
-function closeArticleSidebar() {
-  articleSidebar.inert = true;
-  articleSidebar.classList.remove('open');
-  articleSidebar.setAttribute('aria-hidden', 'true');
-  hideBackdropIfNothingOpen();
-}
-
-function showBackdropIfMobile() {
-  if (window.innerWidth > 768) return;
-  panelBackdrop.classList.add('visible');
-}
-function hideBackdropIfNothingOpen() {
-  if (!articleSidebar.classList.contains('open') && !anatomy.dialog.open) {
-    panelBackdrop.classList.remove('visible');
-  }
-}
+function closeArticleSidebar() { articleSidebar.close(); }
 
 function closeAnatomyPanel() { anatomy.close(); }
 
@@ -411,6 +358,8 @@ async function sendMessage(text) {
   userInput.style.height = 'auto';
   const userNode = addUserMessage(msg);
   const before = [...conversation];
+  const beforeTimes = [...turnTimes];
+  pendingTurnTime = null;
   const version = sessionVersion;
   conversation.push(msg);
   setInputDisabled(true);
@@ -425,7 +374,7 @@ async function sendMessage(text) {
   try {
     const resp = await fetch('/api/chat/stream', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-      body: JSON.stringify({ conversation, conversation_id: conversationId }),
+      body: JSON.stringify({ conversation, conversation_id: conversationId, context: clientContext(), user_turn_times: turnTimes }),
     });
     if (!resp.ok || !resp.body) {
       let detail = 'The service is unavailable. Please try again.';
@@ -452,7 +401,7 @@ async function sendMessage(text) {
         if (!eventType || !lines.length) continue;
         const data = JSON.parse(lines.join('\n'));
         if (version !== sessionVersion) return false;
-        if (eventType === 'meta') conversationId = data.conversation_id;
+        if (eventType === 'meta') { conversationId = data.conversation_id; pendingTurnTime = data.request_context?.received_at || null; }
         if (eventType === 'step') appendStep(wrap, data.message);
         if (eventType === 'error') throw new Error(data.detail || 'Please try again.');
         if (eventType === 'result') { handleResult(wrap, msgId, data); succeeded = true; break; }
@@ -466,6 +415,7 @@ async function sendMessage(text) {
     wrap.remove();
     userNode.remove();
     conversation = before;
+    turnTimes = beforeTimes;
     userInput.value = msg;
     const detail = controller.signal.aborted
       ? (controller.signal.reason === 'timeout' ? 'This is taking too long. Your question has been kept below.' : 'Response stopped. Your question has been kept below.')
@@ -522,6 +472,7 @@ function startNewConversation() {
   setInputDisabled(false);
   conversationId = null;
   conversation = [];
+  turnTimes = [];
   currentArticles = [];
   messageAnatomy.clear();
   messageArticles.clear();
@@ -564,7 +515,6 @@ themeToggleBtn?.addEventListener('click', () => {
 });
 
 articleSidebarClose?.addEventListener('click', closeArticleSidebar);
-panelBackdrop?.addEventListener('click', () => { closeArticleSidebar(); closeAnatomyPanel(); });
 
 chatContainer.addEventListener('click', e => {
   const el = e.target.closest('[data-action]');
@@ -573,8 +523,7 @@ chatContainer.addEventListener('click', e => {
 
   switch (action) {
     case 'citation-ref':
-      pulseCitationRef(el);
-      scrollToSourceCard(el.dataset.msgId, parseInt(el.dataset.idx, 10));
+      openArticleSidebar(el.dataset.msgId, parseInt(el.dataset.idx, 10));
       break;
     case 'open-source':
       openArticleSidebar(el.dataset.msgId, parseInt(el.dataset.idx, 10));
@@ -586,6 +535,20 @@ chatContainer.addEventListener('click', e => {
     case 'copy-answer':
       handleCopyAnswer(el);
       break;
+    case 'open-education': {
+      const version = sessionVersion;
+      import('./education.js').then(module => { if (version === sessionVersion && el.isConnected) module.openEyeEducation(el); }).catch(() => { if (version === sessionVersion) systemErrorMessage('The visual could not load. Please try again.'); });
+      break;
+    }
+    case 'not-sure': {
+      const item = el.closest('.question-item');
+      item.querySelector('textarea').value = 'Not sure';
+      updateClarification(el.closest('form'));
+      item.open = false;
+      const next = item.nextElementSibling;
+      if (next?.matches('details')) { next.open = true; next.querySelector('textarea').focus(); }
+      break;
+    }
     case 'open-anatomy':
       openAnatomyPanel(el.dataset.msgId);
       break;
@@ -604,10 +567,12 @@ chatContainer.addEventListener('mouseout', e => {
 });
 chatContainer.addEventListener('scroll', hideCitationTooltip);
 initTheme();
+document.querySelectorAll('dialog').forEach(trapDialogFocus);
+hydrateIcons();
+initContext();
 renderHero();
 fetch('/api/health', { signal: AbortSignal.timeout(10000) }).then(r => setOnlineStatus(r.ok)).catch(() => setOnlineStatus(false));
 
 document.getElementById('stop-btn').addEventListener('click', () => activeRequest?.abort());
-document.addEventListener('keydown', event => {
-  if (event.key === 'Escape') { closeArticleSidebar(); closeAnatomyPanel(); userInput.focus(); }
-});
+articleSidebar.addEventListener('click', event => { if (event.target === articleSidebar) { const r = articleSidebar.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) articleSidebar.close(); } });
+document.querySelectorAll('[data-example]').forEach(button => button.addEventListener('click', () => { userInput.value = button.dataset.example; userInput.dispatchEvent(new Event('input')); userInput.focus(); }));
