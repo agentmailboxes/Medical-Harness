@@ -18,6 +18,10 @@ HTTP clients are pooled and closed on shutdown. Provider calls have bounded retr
 
 Cache values contain sensitive derived data in memory; expired entries are removed during cache operations. No prompts, patient text or keys belong in logs. Protected metrics expose numeric counters only. Caches, concurrency and quotas are per instance; global limits require platform infrastructure.
 
+## Visitor analytics
+
+Production on Vercel adds a separate bundled analytics bootstrap using `@vercel/analytics`. It loads Vercel's same-origin collection script and records anonymous page views. The filter strips query strings and fragments and rejects custom events; it never receives chat text or clinical tool results. Local and preview HTML omit the bootstrap. Country, browser, and device breakdowns are available in the project's Vercel dashboard. See [deployment](DEPLOYMENT.md).
+
 ## Browser and anatomy
 
 The initial response already contains the home screen and home layout. A small synchronous theme script runs before CSS; startup does not replace the hero. HTML/manifests revalidate, while hashed bundles and GLBs use immutable caching. Instrument Sans is a self-hosted 30 KB variable font with a system fallback and swap behavior. Selected Lucide icons are bundled locally. There are no CDN runtime requests. FastAPI developer documentation has a separate CSP for its Swagger/ReDoc assets.

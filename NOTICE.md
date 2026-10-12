@@ -18,6 +18,8 @@ Selected [Lucide](https://lucide.dev/) icons use the ISC license. [Instrument Sa
 
 The educational guides use original application SVG schematics and paraphrase linked National Eye Institute, National Heart, Lung, and Blood Institute, National Institute of Diabetes and Digestive and Kidney Diseases, and National Institute of Arthritis and Musculoskeletal and Skin Diseases material. No source illustrations or clinical videos are copied. NIH does not endorse this application. The conceptual illustrations are not clinically validated simulations.
 
+The bundled [`@vercel/analytics`](https://github.com/vercel/analytics) SDK uses the MIT license, preserved in `static/vendor-licenses/vercel-analytics.txt`. Vercel Web Analytics collects anonymous production page views through same-origin endpoints; it does not receive chat contents or clinical tool properties from this application.
+
 ## External services
 
 medical-harness calls Cerebras and MediSearch using your own API keys. Their services, returned content, and usage terms are independent of this repository's MIT license.

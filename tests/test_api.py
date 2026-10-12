@@ -81,6 +81,20 @@ def test_index_serves_html(client):
     assert "<!DOCTYPE html>" in resp.text
 
 
+@pytest.mark.parametrize("vercel,environment,enabled", [
+    ("1", "production", True), ("1", "preview", False),
+    ("1", "development", False), ("0", "production", False),
+])
+def test_analytics_only_loads_on_vercel_production(monkeypatch, vercel, environment, enabled):
+    monkeypatch.setenv("VERCEL", vercel)
+    monkeypatch.setenv("VERCEL_ENV", environment)
+    with TestClient(create_app()) as client:
+        response = client.get("/")
+    assert ("/static/dist/analytics-" in response.text) is enabled
+    assert "{{ANALYTICS_SCRIPT}}" not in response.text
+    assert "connect-src 'self'" in response.headers["content-security-policy"]
+
+
 def test_chat_valid(client):
     resp = client.post("/api/chat", json={"conversation": ["What is flu?"]})
     assert resp.status_code == 200

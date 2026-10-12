@@ -4,6 +4,7 @@ import logging
 import json
 import asyncio
 import secrets
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -36,6 +37,10 @@ def create_app() -> FastAPI:
     index_html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     for token, entry in (("APP_JS", "app.js"), ("THEME_JS", "theme-init.js"), ("APP_CSS", "app.css")):
         index_html = index_html.replace("{{" + token + "}}", assets[entry])
+    analytics_script = ""
+    if os.getenv("VERCEL") == "1" and os.getenv("VERCEL_ENV") == "production":
+        analytics_script = f'<script type="module" src="{assets["analytics.js"]}"></script>'
+    index_html = index_html.replace("{{ANALYTICS_SCRIPT}}", analytics_script)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

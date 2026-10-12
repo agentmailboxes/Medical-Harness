@@ -43,3 +43,5 @@ A zero cache capacity or TTL disables storage. Cached classifications and eviden
 Set `METRICS_TOKEN` to expose aggregate token, cache, circuit and outcome metrics through authenticated `/api/metrics`. No patient text or API keys are included. Set `CORS_ORIGINS` only when a separate trusted frontend needs access. An empty value is suitable for the same-origin UI.
 
 `VERCEL_PREVIEW_FEEDBACK_ENABLED=0` is a Vercel platform setting for previews, not a Python application setting. It suppresses toolbar injection. Vercel sets `VERCEL=1` itself; do not set it on other hosts, where forwarded geographic headers are not trusted. The pinned `tzdata` dependency supplies IANA time-zone rules on Windows and minimal containers. Request context is documented in [API.md](API.md).
+
+Vercel also sets `VERCEL_ENV`. The visitor analytics bootstrap is included only when it is `production` and `VERCEL=1`. No analytics key belongs in `.env`; enable Web Analytics on the Vercel project and redeploy to provision its same-origin endpoints.

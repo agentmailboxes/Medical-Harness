@@ -4,7 +4,7 @@ import { mkdir, writeFile, readdir, unlink } from 'node:fs/promises';
 const outdir = 'static/dist';
 await mkdir(outdir, { recursive: true });
 const result = await build({
-  entryPoints: ['static/js/app.js', 'static/js/theme-init.js', 'static/css/app.css'],
+  entryPoints: ['static/js/app.js', 'static/js/theme-init.js', 'static/js/analytics.js', 'static/css/app.css'],
   outdir, bundle: true, splitting: true, format: 'esm', target: 'es2022',
   entryNames: '[name]-[hash]', chunkNames: '[name]-[hash]', minify: true,
   legalComments: 'external', metafile: true,
