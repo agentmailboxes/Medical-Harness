@@ -389,39 +389,32 @@ class AgentPipeline:
             tool_results_section = ""
 
 
-        articles = evidence.get("articles", [])[: self.max_evidence_articles]
-        if articles:
-            evidence_lines = []
-            for i, art in enumerate(articles, 1):
-                tldr = _truncate(art.get("tldr", ""), self.max_tldr_chars)
-                evidence_lines.append(
-                    f"[{i}] {art.get('title', 'Unknown')} ({art.get('year', 'N/A')}). "
-                    f"{art.get('journal', '')}. {tldr} URL: {art.get('url', '')}"
-                )
-            evidence_text = "\n".join(evidence_lines)
-        else:
-            evidence_text = (
-                "No specific articles retrieved. Answer based on established "
-                "medical knowledge only, and note the limitation."
-            )
-
-        medi_response = _truncate(evidence.get("response", ""), self.max_summary_chars)
-        if medi_response:
-            evidence_text += f"\n\nMedisearch summary:\n{medi_response}"
-
         return ANSWER_USER.format(
             question=question,
             tool_results_section=tool_results_section,
-            evidence_text=evidence_text,
+            evidence_text=self._format_evidence(evidence),
         )
+
+    def _format_evidence(self, evidence: dict) -> str:
+        articles = evidence.get("articles", [])[: self.max_evidence_articles]
+        lines = [
+            f"[{i}] {art.get('title', 'Unknown')} ({art.get('year', 'N/A')}). "
+            f"{art.get('journal', '')}. {_truncate(art.get('tldr', ''), self.max_tldr_chars)} "
+            f"URL: {art.get('url', '')}"
+            for i, art in enumerate(articles, 1)
+        ]
+        text = "\n".join(lines) or "No source excerpts available. State the evidence limitation."
+        summary = _truncate(evidence.get("response", ""), self.max_summary_chars)
+        if summary:
+            text += (
+                "\n\nRetrieval summary (context only, not an independent source; "
+                "claims must be supported by the numbered source excerpts):\n" + summary
+            )
+        return text
 
     async def _safety_check(self, question: str, answer: str, evidence: dict, tool_results=None) -> str:
         articles = evidence.get("articles", [])[: self.max_evidence_articles]
-        citation_lines = [
-            f"[{i}] {art.get('title', '')} ({art.get('year', '')}) {art.get('tldr', '')[:self.max_tldr_chars]}"
-            for i, art in enumerate(articles, 1)
-        ]
-        citations_text = "\n".join(citation_lines) or "No citations available."
+        citations_text = self._format_evidence(evidence)
         if tool_results:
             import json
             citations_text += "\nTool outputs (label directory entries do not contain label contents):\n" + json.dumps(tool_results, ensure_ascii=False)

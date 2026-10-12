@@ -376,6 +376,30 @@ class TestStepCaching:
 
 
 class TestTokenBudgets:
+    async def test_generation_and_each_review_receive_identical_bounded_evidence(self):
+        p = make_pipeline({"action": "answer"})
+        evidence = {
+            "articles": [{"title": "Reference", "year": "2025", "journal": "Journal",
+                          "url": "https://example.org/reference", "tldr": "x" * 2000}],
+            "response": "summary " * 1000,
+        }
+        expected = p._build_answer_user("q?", [], evidence).split("Retrieved medical source excerpts:\n", 1)[1]
+        reviews = []
+
+        async def review(user, **kwargs):
+            reviews.append(user.split("Available citations:\n", 1)[1])
+            if len(reviews) == 1:
+                return json.dumps({"is_safe": False, "issues": ["Revise"], "revised_answer": "Revised [1]."})
+            return json.dumps({"is_safe": True, "issues": [], "revised_answer": ""})
+
+        p.llm.generate = review
+        assert await p._safety_check("q?", "Draft [1].", evidence) == "Revised [1]."
+        assert reviews == [expected, expected]
+        assert "https://example.org/reference" in expected
+        assert "not an independent source" in expected
+        assert "x" * (p.max_tldr_chars + 1) not in expected
+        assert "summary " * 1000 not in expected
+
     async def test_answer_prompt_caps_articles_and_tldr(self):
         many_articles = [
             {
