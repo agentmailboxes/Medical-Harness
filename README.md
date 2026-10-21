@@ -80,7 +80,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and pull req
 uv sync --locked
 uv run pytest -q
 npm ci --ignore-scripts
-npm run build
+npx playwright install chromium # Linux/macOS only; Windows tests use installed Google Chrome
 npm run check:anatomy
 npx playwright install chromium
 npm run test:browser
