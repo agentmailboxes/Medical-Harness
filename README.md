@@ -47,6 +47,8 @@ Missing or empty provider keys cause a settings validation error at startup.
 uv run medical-harness
 ```
 
+Refreshing the page clears the current conversation; the app has no durable conversation history.
+
 Open <http://localhost:8080>. Check <http://localhost:8080/api/health> if the page does not load. The interactive API reference is at <http://localhost:8080/docs>.
 
 If port 8080 is busy, set `PORT=8081` in `.env`, restart the app, and open <http://localhost:8081>.
