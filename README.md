@@ -19,6 +19,7 @@ Ask a health question and get an evidence-grounded answer with source articles. 
 - Find official US medicine label links and PubMed-indexed research abstracts when relevant.
 - Open a focused 3D reference scene when a spatial explanation helps the question. General questions download no 3D assets.
 - Explore sourced visual explanations of eye pressure, asthma, reflux, kidney stones, gallstones, joint changes, discs, and arterial plaque when relevant. These compare mechanisms rather than simulate your body.
+- Adjust your time zone and optional country using the globe button beside the question box.
 - Switch between light and dark themes on desktop or mobile.
 
 ## Run locally
