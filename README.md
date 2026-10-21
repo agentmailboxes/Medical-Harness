@@ -96,4 +96,4 @@ Docker and DigitalOcean deployment notes are in [docs/DEPLOYMENT.md](docs/DEPLOY
 
 The application code is [MIT licensed](LICENSE). The included BodyParts3D-derived anatomy data is licensed separately under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); see [NOTICE.md](NOTICE.md) for attribution and asset details.
 
-The mobile-first interface offers direct citation sheets, an on-demand eye-pressure visual guide, and editable time-zone/country context. Relative dates use the server clock and preserve earlier turn timestamps. See [browser screenshots](docs/VISUALS.md) and [the API contract](docs/API.md).
+See [browser screenshots](docs/VISUALS.md) and [the API contract](docs/API.md).
