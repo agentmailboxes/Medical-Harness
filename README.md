@@ -12,6 +12,7 @@ Ask a health question and get an evidence-grounded answer with source articles. 
 
 ## What you can do
 
+- Adjust your time zone and optional country using the globe button beside the question box.
 - Ask a question in plain language and follow up in the same conversation.
 - Read an answer linked to medical source articles. If retrieval fails, the agent does not invent supporting sources.
 - Use adult BMI, CKD-EPI 2021 eGFR, estimated average glucose, measurement conversion, Wells DVT, CHA2DS2-VASc, and MRC muscle strength tools; see their [scope and limitations](docs/RELIABILITY.md) .
