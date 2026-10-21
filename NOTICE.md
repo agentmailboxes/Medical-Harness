@@ -12,7 +12,7 @@ The previous full-body runtime assets and viewer are removed. The underlying lic
 
 ## Bundled browser libraries
 
-Three.js and its Meshopt decoder are bundled locally. Their MIT notices are retained in `static/vendor-licenses/` and the generated bundle notice. Build tooling is pinned in `package-lock.json`.
+Three.js and its Meshopt decoder are bundled locally. Full MIT notices are retained for [Three.js](static/vendor-licenses/three-MIT.txt) and [Meshoptimizer](static/vendor-licenses/meshoptimizer-MIT.txt), with additional notices in generated bundles.
 
 Selected [Lucide](https://lucide.dev/) icons use the ISC license. [Instrument Sans](https://fonts.google.com/specimen/Instrument+Sans) is self-hosted under the SIL Open Font License 1.1. Their full notices are in `static/vendor-licenses/`. The eye-pressure schematic is an original application asset. The active m monogram is an SVG adaptation of the approved OpenAI-generated concept preserved in `docs/brand/`; it is not an Adobe or stock asset. No generated squirrel image is included.
 
