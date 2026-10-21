@@ -91,6 +91,7 @@ npx playwright install chromium # Linux/macOS only; Windows tests use installed 
 npm run check:anatomy
 After linking a project, validate a preview with `vercel deploy --target preview` before deploying production with `vercel deploy --prod`.
 npx playwright install chromium
+The app has no built-in user authentication; review the [deployment](docs/DEPLOYMENT.md) and [security](SECURITY.md) guidance before publishing it.
 npm run test:browser
 ```
 For UI changes, check desktop and mobile widths, both themes, keyboard navigation, and reduced-motion behavior.
