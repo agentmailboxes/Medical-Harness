@@ -89,6 +89,7 @@ uv run pytest -q
 npm ci --ignore-scripts
 npx playwright install chromium # Linux/macOS only; Windows tests use installed Google Chrome
 npm run check:anatomy
+After linking a project, validate a preview with `vercel deploy --target preview` before deploying production with `vercel deploy --prod`.
 npx playwright install chromium
 npm run test:browser
 ```
