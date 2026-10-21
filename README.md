@@ -46,6 +46,8 @@ uv run medical-harness
 
 Open <http://localhost:8080>. Check <http://localhost:8080/api/health> if the page does not load. The interactive API reference is at <http://localhost:8080/docs>.
 
+If port 8080 is busy, set `PORT=8081` in `.env`, restart the app, and open <http://localhost:8081>.
+
 The `.env` file is ignored by Git. Do not commit keys or put them in screenshots, issues, or pull requests. Tests use fake keys and do not call the paid APIs.
 
 ### Docker
