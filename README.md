@@ -14,7 +14,7 @@ Ask a health question and get an evidence-grounded answer with source articles. 
 
 - Ask a question in plain language and follow up in the same conversation.
 - Read an answer linked to medical source articles. If retrieval fails, the agent does not invent supporting sources.
-- Use seven calculators and converters with explicit inputs, units, and source references.
+- Use adult BMI, CKD-EPI 2021 eGFR, estimated average glucose, measurement conversion, Wells DVT, CHA2DS2-VASc, and MRC muscle strength tools; see their [scope and limitations](docs/RELIABILITY.md) .
 - Find official US medicine label links and PubMed-indexed research abstracts when relevant.
 - Open a focused 3D reference scene when a spatial explanation helps the question. General questions download no 3D assets.
 - Explore sourced visual explanations of eye pressure, asthma, reflux, stones, joint changes, discs, and arterial plaque when relevant. These compare mechanisms rather than simulate your body.
