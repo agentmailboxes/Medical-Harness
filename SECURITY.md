@@ -13,4 +13,5 @@ Include the affected version or commit, reproduction steps with synthetic data, 
 - Keep `CEREBRAS_API_KEY` and `MEDISEARCH_API_KEY` in `.env` locally or your host's environment variable store. `.env` is Git-ignored.
 - Rotate a key immediately if it appears in a commit, issue, screenshot, build log, or chat transcript. Remove it from the provider account after the replacement is deployed.
 - The in-process rate limiter is not a distributed abuse-control layer. Public deployments should add platform-level controls appropriate for their traffic.
+- In-memory caches may contain derived health-question text; see [cache configuration](docs/CONFIGURATION.md) for retention settings.
 - The application does not provide user authentication or a persistent patient record. Review provider privacy terms before accepting sensitive data.
