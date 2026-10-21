@@ -40,6 +40,7 @@ On Windows PowerShell, use `Copy-Item .env.example .env`.
 Environment variables set in your shell override values in `.env`.
 
 Set `CEREBRAS_API_KEY` and `MEDISEARCH_API_KEY` in `.env`, then start the app:
+Missing or empty provider keys cause a settings validation error at startup.
 
 ```bash
 uv run medical-harness
