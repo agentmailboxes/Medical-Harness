@@ -86,7 +86,7 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-Node 22+ is needed only to change or test the frontend. Self-hosted bundles and regional GLBs are checked in, so Python deployments do not need npm. Run the browser tests against a local server with fake provider keys. CI checks the bundle is current and runs offline Python, geometry, and browser checks. Optional live evaluations require `--live`; see [the evaluation guide](docs/EVALUATION.md).
+Node 22+ is needed only to change or test the frontend. Self-hosted bundles and regional GLBs are checked in, so Python deployments do not need npm. Playwright automatically starts a local test server with fake provider keys.. CI checks the bundle is current and runs offline Python, geometry, and browser checks. Optional live evaluations require `--live`; see [the evaluation guide](docs/EVALUATION.md).
 
 ## Deploy
 
