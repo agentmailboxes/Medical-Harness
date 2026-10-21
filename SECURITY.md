@@ -6,7 +6,7 @@ medical-harness handles health questions. Avoid entering identifiable patient in
 
 Use GitHub's **Report a vulnerability** option on this repository's Security tab when available. If it is unavailable, contact the repository owner privately through their GitHub profile. Do not publish exploit details or secrets in a public issue.
 
-Include the affected version or commit, reproduction steps with synthetic data, and the expected impact. The maintainers will acknowledge the report and coordinate a fix and disclosure.
+Include the affected version or commit, reproduction steps with synthetic data, and the expected impact. The maintainers will acknowledge the report and coordinate a fix and disclosure. Include your Python version, browser version, and deployment type when relevant.
 
 ## Secrets and deployments
 
