@@ -72,6 +72,8 @@ docker run --env-file .env -p 8080:8080 medical-harness
 
 Read [the architecture guide](docs/ARCHITECTURE.md) for the request flow and the [API guide](docs/API.md) for example requests and streaming events. [AGENTS.md](AGENTS.md) is the short working map for coding agents.
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and pull request guidelines.
+
 ## Develop
 
 ```bash
