@@ -85,6 +85,7 @@ npm run check:anatomy
 npx playwright install chromium
 npm run test:browser
 ```
+Commit rebuilt `static/dist/` and `static/build.json` alongside frontend source changes.
 Stop any existing development server on port 8080 before browser tests so Playwright starts its fake-key test server.
 
 Node 22+ is needed only to change or test the frontend. Self-hosted bundles and regional GLBs are checked in, so Python deployments do not need npm. Playwright automatically starts a local test server with fake provider keys.. CI checks the bundle is current and runs offline Python, geometry, and browser checks. Optional live evaluations require `--live`; see [the evaluation guide](docs/EVALUATION.md).
