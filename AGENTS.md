@@ -16,7 +16,7 @@ This file is the short starting point for coding agents. Follow the user's curre
 - `app/llm.py` and `app/evidence.py`: external provider calls. Do not log prompts, patient text, or keys.
 - `app/prompts.py`: model instructions. Changes here can affect safety and citations.
 - `app/tools/clinical.py`: deterministic calculators. `app/tools/anatomy.py`: body-region selection.
-- `static/index.html`, `static/js/`, `static/css/`: browser sources; `npm run build` updates checked-in hashed bundles in `static/dist/`.
+- `static/index.html`, `static/js/`, `static/css/`: browser sources; `npm run build` updates checked-in hashed bundles in `static/dist/` The build also updates `static/build.json`; commit it with the generated bundles.
 - `static/assets/atlas/`: focused BodyParts3D-derived scenes; preserve attribution in `NOTICE.md` and the viewer. Validate with `npm run check:anatomy`.
 - `app/tools/references.py`: bounded DailyMed and Europe PMC lookups.
 - `app/tools/education.py` and `static/js/education-catalog.js`: allowed educational guide IDs and browser titles.
