@@ -19,6 +19,7 @@ This file is the short starting point for coding agents. Follow the user's curre
 - `static/index.html`, `static/js/`, `static/css/`: browser sources; `npm run build` updates checked-in hashed bundles in `static/dist/`.
 - `static/assets/atlas/`: focused BodyParts3D-derived scenes; preserve attribution in `NOTICE.md` and the viewer. Validate with `npm run check:anatomy`.
 - `app/tools/references.py`: bounded DailyMed and Europe PMC lookups.
+- `app/tools/education.py` and `static/js/education-catalog.js`: allowed educational guide IDs and browser titles.
 - `evals/`: synthetic evaluations and the offline comparison gate; never enable live calls in routine tests.
 - `tests/`: mocked API and pipeline tests.
 
